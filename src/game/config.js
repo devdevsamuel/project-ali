@@ -162,7 +162,10 @@ export const LIFE_GRACE_SECONDS = 0.9;
 export const SURVIVAL_DELAY_MIN = 3;
 export const SURVIVAL_DELAY_MAX = 5;
 export const SURVIVAL_WARNING_SECONDS = 1.4;
+// The opening survival milestone. Reaching it only confirms that the family
+// has held its ground; the guerrillas keep attacking after the timer ends.
 export const SURVIVAL_SECONDS = 5;
+export const GUERRILLA_LABEL_TEXT = 'Guerrillero';
 export const SURVIVAL_SHOT_SPEED = 520;
 export const SURVIVAL_SHOT_UP = 30;
 export const SURVIVAL_SHOT_HEIGHT = 14;

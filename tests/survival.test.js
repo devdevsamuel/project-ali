@@ -348,33 +348,39 @@ function driveEncounter(game, { survive }) {
   return activeFrames;
 }
 
-test('surviving five full seconds triggers the Continuará... ending', () => {
+test('surviving five full seconds is a milestone, not an ending', () => {
   const game = createGame();
   reachCouple(game);
   joinBaby(game);
   const activeFrames = driveEncounter(game, { survive: true });
 
-  assert.equal(game.state, 'ending', 'the secret ending replaces the run');
   assert.ok(
     activeFrames >= SURVIVAL_SECONDS * 60 - 2,
     `survived ${activeFrames} active frames (need ${SURVIVAL_SECONDS * 60})`,
   );
-  assert.equal(game.endingScene !== null, true);
+  assert.equal(game.state, 'running', 'the run continues after the milestone');
+  assert.equal(game.endingScene, null, 'the milestone does not start Continuará...');
+  assert.ok(game.survival, 'the encounter remains active');
+  assert.equal(game.survival.milestone, true, 'the milestone is recorded');
+  assert.ok(game.guerrillas.length > 0, 'the guerrillas are not removed');
+  assert.ok(game.distance > 0, 'the road keeps scrolling');
+});
 
-  // Everything from the encounter is cancelled the moment the ending lands.
-  assert.equal(game.survival, null, 'no survival timer remains');
-  assert.equal(game.survivalDelay, null, 'no pending encounter timer remains');
-  assert.deepEqual(game.guerrillas, [], 'no enemies remain');
-  assert.deepEqual(game.survivalShots, [], 'no projectiles remain');
-  assert.deepEqual(game.hazards, [], 'no street hazards remain');
+test('the ending can still start explicitly but is never reached by the timer', () => {
+  const game = createGame();
+  reachCouple(game);
+  joinBaby(game);
+  driveEncounter(game, { survive: true });
+  assert.equal(game.endingScene, null, 'the timer alone never starts the ending');
+  assert.equal(game.startEnding(), true, 'the explicit ending transition still works');
+  assert.equal(game.state, 'ending');
+  assert.equal(game.endingScene.showBaby, false, 'the baby stays out of the couple composition');
 
-  // Samuel and Ali centre up and share the same kiss animation.
   stepFrames(game, Math.ceil(1.4 * 60));
   assert.equal(game.player.x, ENDING_BOY_X, 'he eases to the centre');
   assert.equal(game.girl.x, ENDING_GIRL_X, 'she eases to the centre');
   assert.equal(game.player.state, 'kiss', 'Samuel is kissing');
   assert.equal(game.girl.state, 'kiss', 'Ali is kissing');
-  assert.equal(game.endingScene.showBaby, false, 'the baby stays out of the couple composition');
   assert.equal(game.startEnding(), false, 'the ending cannot be requested twice');
 
   const crop = game.cameraCrop;
@@ -384,22 +390,20 @@ test('surviving five full seconds triggers the Continuará... ending', () => {
   game.render(); // the ending scene must draw cleanly
 });
 
-test('gameplay inputs do nothing while the ending is active', () => {
+test('gameplay remains active after the five-second milestone', () => {
   const game = createGame();
   reachCouple(game);
   joinBaby(game);
   driveEncounter(game, { survive: true });
-  assert.equal(game.state, 'ending');
+  assert.equal(game.state, 'running');
 
+  const distance = game.distance;
   game.handleJump();
-  game.handleKick();
-  game.handleAdvance();
-  game.togglePause();
+  assert.equal(game.player.jumpsUsed, 1, 'the player can still jump');
   stepFrames(game, 30);
-  assert.equal(game.state, 'ending', 'no input escapes the ending');
-  assert.equal(game.coupleKiss, null, 'no kiss scene started');
-  assert.equal(game.player.state !== 'kick', true, 'no kick pose');
-  assert.equal(game.survival, null, 'the encounter cannot restart');
+  assert.ok(game.distance > distance, 'the run keeps advancing');
+  assert.ok(game.survival, 'the same continuous encounter remains');
+  assert.equal(game.survival.milestone, true, 'the milestone is not restarted');
 });
 
 test('dying before the five seconds prevents the special ending', () => {
@@ -436,12 +440,12 @@ test('dying before the five seconds prevents the special ending', () => {
   assert.equal(game.endingScene, null);
 });
 
-test('restarting from the ending creates a clean new run', () => {
+test('restarting after the survival milestone creates a clean new run', () => {
   const game = createGame();
   reachCouple(game);
   joinBaby(game);
   driveEncounter(game, { survive: true });
-  assert.equal(game.state, 'ending');
+  assert.equal(game.state, 'running');
 
   game.start();
   assert.equal(game.state, 'running');
@@ -523,6 +527,34 @@ test('restarting mid-encounter clears timers, enemies and projectiles', () => {
   stepFrames(game, 60);
   assert.equal(game.survival, null, 'nothing respawns by itself');
   assert.equal(game.state, 'running');
+});
+
+test('every active guerrilla has a persistent label tied to its entity', () => {
+  const game = createGame();
+  reachCouple(game);
+  joinBaby(game);
+  let guard = 0;
+  while (!game.survival && guard < 900) {
+    game.advance(1 / 60);
+    guard += 1;
+  }
+  assert.ok(game.survival);
+  assert.equal(game.guerrillas.length, 2, 'both fighters spawned');
+
+  for (const guerrilla of game.guerrillas) {
+    assert.equal(guerrilla.label, undefined, 'labels are rendered from live entities, not duplicated');
+  }
+
+  const first = game.guerrillas[0];
+  const oldX = first.x;
+  game.guerrillas[0].x += 80;
+  game.render();
+  assert.notEqual(game.guerrillas[0].x, oldX, 'the entity moved before rendering');
+  assert.equal(game.guerrillas.length, 2, 'rendering creates no duplicate enemies or labels');
+
+  game.start();
+  assert.deepEqual(game.guerrillas, [], 'restart removes the fighters and their labels');
+  assert.deepEqual(game.survivalShots, []);
 });
 
 test('the HUD and UI expose lives and the special ending correctly', () => {

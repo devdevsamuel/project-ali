@@ -31,7 +31,7 @@ import {
   BITCH_SIGN_PHRASES,
   LIFE_GRACE_SECONDS,
   SURVIVAL_DELAY_MIN, SURVIVAL_DELAY_MAX, SURVIVAL_WARNING_SECONDS,
-  SURVIVAL_SECONDS, SURVIVAL_SHOT_SPEED, SURVIVAL_SHOT_UP,
+  SURVIVAL_SECONDS, GUERRILLA_LABEL_TEXT, SURVIVAL_SHOT_SPEED, SURVIVAL_SHOT_UP,
   SURVIVAL_SHOT_HEIGHT, SURVIVAL_SHOT_WIDTH, SURVIVAL_MAX_ENEMIES,
   ENDING_GIRL_X, ENDING_BOY_X, ENDING_ZOOM_SECONDS, ENDING_KISS_AT,
   ENDING_CROP,
@@ -1258,7 +1258,7 @@ export class Game {
     if (this.survival || this.state !== 'running' || this.endingScene) {
       return false;
     }
-    this.survival = { phase: 'warning', t: 0, elapsed: 0, started: false };
+    this.survival = { phase: 'warning', t: 0, elapsed: 0, started: false, milestone: false };
     // Readable cue: a toast, a short jolt and two fighters jogging in from
     // beyond the right edge, far away from the family.
     this.announce('¡Guerrillas! Sobrevive 5 segundos.');
@@ -1301,8 +1301,12 @@ export class Game {
     scene.elapsed += deltaTime;
     this.updateGuerrillas(deltaTime);
     this.updateSurvivalShots(deltaTime);
-    if (scene.elapsed >= SURVIVAL_SECONDS) {
-      this.startEnding();
+    if (!scene.milestone && scene.elapsed >= SURVIVAL_SECONDS) {
+      // The five-second challenge is a milestone, not a terminal condition.
+      // Surviving it unlocks no ending: the fight keeps going until the
+      // centralized life system genuinely ends the run.
+      scene.milestone = true;
+      this.announce('¡Aguantaste 5 segundos! Los guerrilleros siguen.');
     }
   }
 
@@ -1348,8 +1352,9 @@ export class Game {
 
   // --- Secret "Continuará..." ending -------------------------------------
 
-  // Reached only by surviving the full five seconds. Everything pending is
-  // cancelled here so no attack, timer or spawn can outlive the transition.
+  // Kept as an explicit terminal transition for the existing ending flow,
+  // but the guerrilla survival milestone never calls it. The encounter ends
+  // only through the centralized life system, not through its timer.
   startEnding() {
     if (this.state !== 'running' || this.endingScene) {
       return false;
@@ -1546,6 +1551,11 @@ export class Game {
     for (const guerrilla of this.guerrillas) {
       guerrilla.draw(view);
     }
+    // Labels are attached to the live guerrilla entities, so they follow each
+    // fighter as he enters and attacks. They stay clear of the HUD and sprites.
+    for (const guerrilla of this.guerrillas) {
+      this.drawGuerrillaLabel(view, guerrilla, this.guerrillas.indexOf(guerrilla));
+    }
     if (this.robber) {
       this.robber.draw(view);
     }
@@ -1627,6 +1637,42 @@ export class Game {
     drawText(view, text, centerX, y + 9, {
       unit: 2, color: '#FFE9C9', align: 'center', alpha, shadow: '#1B1230',
     });
+  }
+
+  // A permanent marker for an active guerrilla, in the same visual language
+  // as Benjamin's introduction: a dark high-contrast plate with a bright
+  // border and a chunky arrow pointing at the fighter. The label is derived
+  // from the entity every frame, so it cannot outlive or point away from it.
+  drawGuerrillaLabel(view, guerrilla, index = 0) {
+    const centerX = guerrilla.x + guerrilla.width / 2;
+    // A small vertical stagger keeps the two labels readable when both
+    // fighters are close together.
+    const stagger = index % 2 === 0 ? 0 : 34;
+    const labelY = guerrilla.y - 78 - stagger + Math.sin(this.visualTime * 3.2 + guerrilla.phase) * 2;
+    const width = measureText(GUERRILLA_LABEL_TEXT, 2) + 20;
+    const left = Math.max(4, Math.min(GAME_WIDTH - width - 4, centerX - width / 2));
+
+    // Dark plate with a lime border: readable over storm and bright city.
+    view.rect(left, labelY - 7, width, 30, '#150C2E', 0.94);
+    view.rect(left, labelY - 7, width, 3, '#B7FF4A');
+    view.rect(left, labelY + 20, width, 3, '#B7FF4A');
+    view.rect(left, labelY - 7, 3, 30, '#B7FF4A');
+    view.rect(left + width - 3, labelY - 7, 3, 30, '#B7FF4A');
+    drawText(view, GUERRILLA_LABEL_TEXT, left + width / 2, labelY + 1, {
+      unit: 2, color: '#FFF5FC', align: 'center', shadow: '#3A0A28',
+    });
+
+    // The arrow always points down at the actual fighter.
+    const arrowTop = labelY + 27;
+    for (let row = 0; row < 4; row += 1) {
+      const half = 9 - row * 2;
+      view.rect(centerX - half - 1, arrowTop + row * 3, half * 2 + 3, 3, '#150C2E');
+    }
+    for (let row = 0; row < 4; row += 1) {
+      const half = 8 - row * 2;
+      view.rect(centerX - half, arrowTop + row * 3, half * 2, 3, '#B7FF4A');
+    }
+    view.rect(centerX - 1, arrowTop + 12, 3, 4, '#B7FF4A');
   }
 
   // Benjamin's introduction marker: a chunky pixel arrow pointing straight
