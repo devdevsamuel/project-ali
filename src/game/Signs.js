@@ -184,13 +184,16 @@ function drawThought(view, entry, x, time) {
   const top = GROUND_Y - 215 + Math.sin(time * 1.4 + entry.phase) * 6;
   const glow = 0.09 + 0.04 * Math.sin(time * 2.2 + entry.phase);
   view.glow(x - width / 2 - 8, top - 8, width + 16, 34, '#C8A7FF', glow, 2);
-  drawText(view, entry.text, x - dogWidth / 2, top, {
+  // The whole group (dogs first, then the words) is centred on x: the dogs
+  // hold the left half and the text starts after them, so no sprite ever
+  // covers the first letters.
+  const groupLeft = x - width / 2;
+  drawText(view, entry.text, x + dogWidth / 2, top, {
     unit: TEXT_UNIT, color: '#E9DBFF', align: 'center', alpha: 0.92,
   });
   if (dogs > 0) {
-    const textLeft = x - dogWidth / 2 - textWidth(entry) / 2;
     for (let index = 0; index < dogs; index += 1) {
-      const dogX = textLeft + 6 + index * DOG_SLOT;
+      const dogX = groupLeft + 6 + index * DOG_SLOT;
       // The dogs bounce gently, one after the other.
       const hop = Math.abs(Math.sin(time * 3 + index * 1.1)) * 3;
       drawPixelDog(view, dogX, top + 14 - hop);

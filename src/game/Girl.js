@@ -36,6 +36,7 @@ export class Girl {
     this.kissT = 0;
     this.glance = 0;
     this.pendingJump = false;
+    this.dead = false;
     this.jumpDelay = 0;
     this.faceOverride = null;
     this.speaking = false;
@@ -70,6 +71,11 @@ export class Girl {
     this.followX = playerX - 46;
     this.x = this.followX;
     this.setState('together');
+  }
+
+  // Once the baby joins the family, a third jump opens up for her too.
+  unlockTripleJump() {
+    this.maxJumps = 3;
   }
 
   setState(state) {
@@ -113,8 +119,18 @@ export class Girl {
     return second ? 'second' : 'first';
   }
 
+  // Collision box for the shared family life system.
+  getBounds() {
+    return {
+      x: this.x + 4,
+      y: this.y + 3,
+      width: this.width - 8,
+      height: this.height - 3,
+    };
+  }
+
   update(deltaTime, player, travelDistance) {
-    if (!this.active) {
+    if (!this.active || this.dead) {
       return;
     }
 
@@ -141,13 +157,16 @@ export class Girl {
       }
     }
 
-    this.followX = player.x - 46;
+    // A dead Samuel no longer leads; she holds her own spot on the road.
+    if (!player.dead) {
+      this.followX = player.x - 46;
+    }
     this.x += (this.followX - this.x) * (1 - Math.exp(-deltaTime * 9));
     stepVertical(this, deltaTime, this.gravity);
   }
 
   updateVisual(deltaTime) {
-    if (!this.active) {
+    if (!this.active || this.dead) {
       return;
     }
     this.time += deltaTime;

@@ -72,7 +72,7 @@ export class Weather {
   // Raises the storm as the run progresses: more drops, faster and brighter
   // rain. The transition is eased inside update(), so the change is smooth.
   // `level` runs from 0 (the base storm) to RAIN_MAX_INTENSITY (the worst
-  // weather the four crystals can bring).
+  // weather the five crystals can bring).
   setIntensity(level) {
     const clamped = Math.max(0, Math.min(RAIN_MAX_INTENSITY, level));
     this.targetIntensity = clamped;

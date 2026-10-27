@@ -9,8 +9,8 @@ import {
 import { hasGlyph } from '../src/game/font.js';
 import { BOY_SPEC } from '../src/game/characterSpec.js';
 
-test('the solo section needs exactly four crystals', () => {
-  assert.equal(CRYSTAL_COUNT, 4);
+test('the solo section needs exactly five crystals', () => {
+  assert.equal(CRYSTAL_COUNT, 5);
   assert.ok(CRYSTAL_DISTANCES.length >= CRYSTAL_COUNT);
 });
 
@@ -21,7 +21,7 @@ test('the UI and source have no leftover seven-crystal references', () => {
     assert.ok(!/seven/i.test(source), 'no "seven" wording remains');
     assert.ok(!/\/\s*7\b/.test(source), 'no "/7" counter remains');
   }
-  assert.match(html, /0\/4/, 'the HUD counter shows four crystals');
+  assert.match(html, /0\/5/, 'the HUD counter shows five crystals');
 });
 
 test('the five personal messages are exact, well spaced and renderable', () => {

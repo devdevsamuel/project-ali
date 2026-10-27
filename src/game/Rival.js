@@ -1,3 +1,5 @@
+import { drawText, measureText, wrapText } from './font.js';
+
 /**
  * Solo-stage obstacles reimagined as original, cartoonish rival characters:
  * fictional stand-ins for romantic frustration, never based on real people.
@@ -30,12 +32,23 @@ const DASH_EXTRA_SPEED = 66;
 const SNARK_DODGE = 14;
 
 // Dark contour used behind every major block, so each rival keeps a crisp
-// silhouette against the storm AND against the white colonial facades.
+// silhouette against the storm. A soft light halo sits outside it: in the
+// dark, wet solo stage the pale rim is what makes her pop out of the rain
+// and shadow, while the dark line keeps the edge crisp on lighter patches.
 const OUTLINE = '#140E22';
+const HALO = '#FFF5FC';
 
 function contour(view, x, y, width, height, alpha = 0.95) {
+  view.rect(x - 4, y - 4, width + 8, height + 8, HALO, alpha * 0.2);
   view.rect(x - 2, y - 2, width + 4, height + 4, OUTLINE, alpha);
 }
+
+// Teasing bubble metrics: text at the same unit the dialogue uses, wrapped so
+// the longest phrase fits without clipping.
+const SIGN_UNIT = 2;
+const SIGN_MAX_WIDTH = 180;
+const SIGN_PAD_X = 8;
+const SIGN_PAD_Y = 5;
 
 export class Rival {
   constructor(x, groundY, variant = 'diva') {
@@ -111,6 +124,7 @@ export class Rival {
 
   draw(view) {
     if (this.knocked) {
+      // The tumble takes the sign with it: kicked rivals stop talking.
       this.drawFallen(view);
       return;
     }
@@ -123,6 +137,45 @@ export class Rival {
     } else {
       this.drawDiva(view, cx);
     }
+    if (this.sign) {
+      this.drawSign(view, cx);
+    }
+  }
+
+  // A small speech bubble with one teasing line, drawn above her shoulder and
+  // biased to the right so it never sits over Samuel (he is always to the
+  // left). It fades and rises in once, then simply rides the entity.
+  drawSign(view, cx) {
+    const sign = this.sign;
+    if (!sign.lines) {
+      sign.lines = wrapText(sign.text, SIGN_MAX_WIDTH, SIGN_UNIT);
+    }
+    const lineW = Math.max(...sign.lines.map((line) => measureText(line, SIGN_UNIT)));
+    const width = lineW + SIGN_PAD_X * 2;
+    const lineHeight = 20;
+    const height = sign.lines.length * lineHeight + SIGN_PAD_Y * 2;
+    const halfW = width / 2;
+
+    const intro = Math.min(1, this.time / 0.35);
+    const bob = Math.sin(this.time * 1.8 + sign.phase) * 1.5;
+    // Keep the whole bubble to the right of her centre so it can never cover
+    // the runner while she closes in on him.
+    const centerX = cx + Math.max(20, halfW - 30);
+    const top = this.groundY - this.height - height - 6 + bob + (1 - intro) * 4;
+    const alpha = intro;
+
+    // Tail pointing back down at her head.
+    const tailX = centerX - halfW + 14;
+    view.rect(tailX - 5, top + height, 10, 4, '#FF69D4', alpha * 0.9);
+    view.rect(tailX - 3, top + height + 4, 6, 3, '#150C2E', alpha);
+    // Border, dark slab, then the wrapped text: the same language as the
+    // kick comments, so the whole game shares one speech-bubble style.
+    view.rect(centerX - halfW - 3, top - 3, width + 6, height + 6, '#FF69D4', alpha * 0.85);
+    view.rect(centerX - halfW, top, width, height, '#150C2E', alpha);
+    view.rect(centerX - halfW + 3, top + 3, width - 6, 2, '#C8A7FF', alpha * 0.6);
+    drawText(view, sign.lines, centerX, top + SIGN_PAD_Y, {
+      unit: SIGN_UNIT, color: '#FFF5FC', align: 'center', alpha,
+    });
   }
 
   // Flashy and overconfident: huge teased curls, shades, hoop earrings,

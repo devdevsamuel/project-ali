@@ -4,24 +4,26 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#170D2E" />
-    <title>Run for Ali</title>
+    <title>Corre por Ali</title>
   </head>
   <body>
     <main class="app">
       <header class="game-header">
-        <h1>Run for Ali</h1>
-        <p>Una carrera solitaria entre la tormenta — cuatro cristales, un reencuentro y un mundo que vuelve a la vida.</p>
+        <h1>Corre por Ali</h1>
+        <p>Una carrera solitaria entre la tormenta — cinco cristales, un reencuentro y un mundo que vuelve a la vida.</p>
       </header>
 
-      <section class="game-shell" aria-label="Juego Run for Ali">
+      <section class="game-shell" aria-label="Juego Corre por Ali">
         <div class="game-frame">
           <div class="hud">
             <div class="hud-stats">
               <span>Distancia: <strong id="distance">0 m</strong></span>
-              <span class="hud-crystals">Cristales: <strong id="crystals">0/4</strong></span>
+              <span class="hud-crystals">Cristales: <strong id="crystals">0/5</strong></span>
               <span class="hud-hearts">Corazones: <strong id="hearts">0</strong></span>
               <span class="hud-money">Dinero: <strong id="money">$100</strong></span>
               <span class="hud-kicks">Patadas: <strong id="kickCount">0</strong></span>
+              <span class="hud-kisses">Besitos: <strong id="kisses">0/4</strong></span>
+              <span class="hud-lives" id="livesChip" hidden>Vidas: <strong id="lives"></strong></span>
             </div>
             <div class="hud-actions">
               <button id="musicButton" class="small-button music-button" type="button" aria-label="Pausar música" aria-pressed="false">♪ Pausar</button>
@@ -29,14 +31,14 @@
             </div>
           </div>
 
-          <canvas id="gameCanvas" width="960" height="540" aria-label="Juego de corredor en lateral. Salta con Espacio o Flecha arriba, patea a los rivales con X o K y reúne los cuatro cristales antes del reencuentro."></canvas>
+          <canvas id="gameCanvas" width="960" height="540" aria-label="Juego de corredor en lateral. Salta con Espacio o Flecha arriba, patea a los rivales con X o K y reúne los cinco cristales antes del reencuentro."></canvas>
 
           <p id="toast" class="toast" hidden></p>
 
           <div id="startScreen" class="overlay">
             <div class="panel">
               <h2>¿Listo para correr?</h2>
-              <p>Pateas y esquiva a las putas, ve hasta popayan y pidele perdon. recupera al amor de tu vida<br />Con la tecla space saltas y con la x pateas bitches</p>
+              <p>Patea y esquiva a las putas, ve hasta Popayán y pidele perdón. Recupera al amor de tu vida.<br />Con la tecla Espacio saltas y con la X pateas a las bichis</p>
               <p class="hint">Espacio o ↑ para saltar, X o K para patear. Durante el reencuentro: Espacio, Enter o toca para continuar.</p>
               <button id="startButton" type="button">Ve por ella chamako pendejo</button>
             </div>
@@ -55,6 +57,16 @@
               <h2>Fin de la carrera</h2>
               <p>Llegaste a <strong id="finalDistance">0 m</strong>.</p>
               <button id="restartButton" type="button">Correr de nuevo</button>
+            </div>
+          </div>
+
+          <!-- Secret ending: only after surviving the full guerrilla event.
+               The title is the exact cliffhanger; the restart control stays
+               clearly separate from it. -->
+          <div id="endingScreen" class="overlay ending-overlay" hidden>
+            <div class="ending-title">Continuará...</div>
+            <div class="ending-actions">
+              <button id="endingRestartButton" type="button">Empezar de nuevo</button>
             </div>
           </div>
         </div>

@@ -76,6 +76,26 @@ export class Effects {
     });
   }
 
+  // The family's third jump: a warm ring with little hearts in the trio's
+  // colours — distinct from the plain double jump, still restrained.
+  familyJump(x, y) {
+    this.add({ kind: 'ring', x, y: y - 4, radius: 8, speed: 220, life: 0.45, color: NEON.hotPink });
+    this.burst(6, (index) => {
+      const angle = (index / 6) * Math.PI * 2;
+      return {
+        kind: 'spark', x, y: y - 8,
+        vx: Math.cos(angle) * 110, vy: Math.sin(angle) * 46 - 60,
+        size: 4, life: 0.42,
+        color: [NEON.pink, NEON.lime, NEON.mint][index % 3],
+      };
+    });
+    this.burst(3, () => ({
+      kind: 'heart', x: x + (Math.random() - 0.5) * 26, y: y - 14,
+      vx: (Math.random() - 0.5) * 40, vy: -70 - Math.random() * 40,
+      gravity: 60, life: 0.95, size: 8, color: NEON.hotPink, sway: 16,
+    }));
+  }
+
   // Collecting a crystal: a bright core pop with a rising shimmer.
   crystalCollect(x, y, tint = NEON.lavender) {
     this.burst(12, (index, total) => {

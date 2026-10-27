@@ -39,6 +39,7 @@ export class Player {
     this.blink = false;
     this.glance = 0;
     this.faceOverride = null;
+    this.dead = false;
     this.speaking = false;
     // Set during the reunion for a softer cinematic blend.
     this.poseBlendRate = null;
@@ -140,23 +141,28 @@ export class Player {
     this.maxJumps = 2;
   }
 
+  // Once the baby joins the family, a third jump opens up.
+  unlockTripleJump() {
+    this.maxJumps = 3;
+  }
+
   jump() {
     if (this.jumpsUsed >= this.maxJumps) {
       return false;
     }
-    const second = this.jumpsUsed === 1;
+    const used = this.jumpsUsed;
     this.jumpsUsed += 1;
-    this.verticalVelocity = -this.jumpSpeed * (second ? 0.88 : 1);
+    this.verticalVelocity = -this.jumpSpeed * (used === 0 ? 1 : 0.88);
     this.grounded = false;
     this.airTime = 0;
     this.landTimer = 0;
     // Jumping out of a kick gives control back to the jump animation.
     this.stateLock = false;
     this.setState('rise');
-    if (second) {
+    if (used >= 1) {
       this.doubleFlash = 0.4;
     }
-    return second ? 'second' : 'first';
+    return used === 0 ? 'first' : (used === 1 ? 'second' : 'third');
   }
 
   setState(state) {

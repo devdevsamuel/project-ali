@@ -3,7 +3,7 @@ import {
   CRYSTAL_COUNT, CRYSTAL_DISTANCES, CRYSTAL_RESPAWN_GAP,
 } from './config.js';
 
-// Three luminous cores so the four crystals feel like a set, not clones.
+// Three luminous cores so the five crystals feel like a set, not clones.
 const CORES = [
   { light: '#FFB3E8', main: '#FF69D4', deep: '#C22690' },
   { light: '#E4D4FF', main: '#C8A7FF', deep: '#7A52C7' },

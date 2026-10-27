@@ -14,6 +14,9 @@ import { CrystalField } from './Crystal.js';
 import { PixelView } from './render.js';
 import { NEON } from './palette.js';
 import { AudioManager } from './Audio.js';
+import { Baby } from './Baby.js';
+import { Guerrilla, drawChancleta } from './Guerrilla.js';
+import { drawText, measureText } from './font.js';
 import {
   ART, GAME_WIDTH, GAME_HEIGHT, GROUND_Y, PIXELS_PER_METER, PLAYER_X,
   HEART_MIN_DISTANCE, PROGRESS_DISTANCE, CRYSTAL_COUNT,
@@ -22,6 +25,16 @@ import {
   OUTRO_PULLBACK_START, OUTRO_PULLBACK,
   REUNION_CROP_WIDTH, REUNION_CROP_HEIGHT, REUNION_CROP_Y,
   KISS_GAP, GIRL_KISS_STEP, GIRL_WAIT_AHEAD, AWAKEN_SECONDS,
+  KISSES_REQUIRED_FOR_BABY, KISS_INSTRUCTION_DELAY, KISS_INSTRUCTION_HOLD,
+  KISS_INSTRUCTION_FADE, KISS_INSTRUCTION_TEXT,
+  BABY_INTRO_DURATION, BABY_INTRO_FADE, BABY_INTRO_TEXT,
+  BITCH_SIGN_PHRASES,
+  LIFE_GRACE_SECONDS,
+  SURVIVAL_DELAY_MIN, SURVIVAL_DELAY_MAX, SURVIVAL_WARNING_SECONDS,
+  SURVIVAL_SECONDS, SURVIVAL_SHOT_SPEED, SURVIVAL_SHOT_UP,
+  SURVIVAL_SHOT_HEIGHT, SURVIVAL_SHOT_WIDTH, SURVIVAL_MAX_ENEMIES,
+  ENDING_GIRL_X, ENDING_BOY_X, ENDING_ZOOM_SECONDS, ENDING_KISS_AT,
+  ENDING_CROP,
   KICK_QUIPS, KICK_ACTIVE_START, KICK_ACTIVE_END, KICK_COOLDOWN_END,
   KICK_HITSTOP, KICK_SHAKE, KICK_SHAKE_DECAY, KICK_SUCCESS_TARGET,
   ROBBER_FIRST_DELAY,
@@ -56,7 +69,7 @@ function rectanglesOverlap(first, second) {
 
 /**
  * Flow: run the stormy solo section — rivals to jump or kick, an occasional
- * robber, emotional signs and the four crystals — then reach the girl waiting
+ * robber, emotional signs and the five crystals — then reach the girl waiting
  * down the path. The reunion is a dedicated frozen cinematic: he walks over,
  * kneels, they talk through the dialogue beats, then share the animated kiss
  * under a camera cut. Afterwards the couple runs together with a shared double
@@ -70,6 +83,8 @@ export class Game {
     onCrystalsChange = () => {},
     onMoneyChange = () => {},
     onKickCountChange = () => {},
+    onKissCountChange = () => {},
+    onLivesChange = () => {},
     onNotice = () => {},
   } = {}) {
     this.canvas = canvas;
@@ -80,6 +95,8 @@ export class Game {
     this.onCrystalsChange = onCrystalsChange;
     this.onMoneyChange = onMoneyChange;
     this.onKickCountChange = onKickCountChange;
+    this.onKissCountChange = onKissCountChange;
+    this.onLivesChange = onLivesChange;
     this.onNotice = onNotice;
     this.state = 'start';
     this.lastFrameTime = 0;
@@ -124,6 +141,30 @@ export class Game {
     this.heartCount = 0;
     this.money = STARTING_MONEY;
     this.kickCount = 0;
+    // Rotates the teasing lines so neighbouring rivals never repeat one.
+    this.signPhraseIndex = 0;
+    // Completed kisses in couple mode; KISSES_REQUIRED_FOR_BABY bring the baby.
+    this.kisses = 0;
+    this.baby = null;
+    this.babyRevealed = false;
+    // The temporary "Benjamin" marker: armed once he has actually joined.
+    this.babyIntro = null;
+    this.babyIntroDone = false;
+    this.coupleHint = null;
+    // Family life system: lost in a fixed order — Samuel, Ali, then the baby.
+    this.lifeOrder = [];
+    this.lives = 0;
+    this.lifeGrace = 0;
+    // Samuel dying before the baby joins revokes the unlock for this run.
+    this.babyLocked = false;
+    // Guerrilla survival event: armed only after the baby has joined.
+    this.survival = null;
+    this.survivalDelay = null;
+    this.survivalDelayStarted = false;
+    this.guerrillas = [];
+    this.survivalShots = [];
+    // The secret "Continuará..." ending scene.
+    this.endingScene = null;
     // Every rival the runner has already kicked this run. It keeps one kick
     // from counting the same rival twice.
     this.kickedHazards = new Set();
@@ -138,6 +179,7 @@ export class Game {
     this.couple = false;
     this.awakenTime = 0;
     this.reunion = null;
+    this.coupleKiss = null;
     this.quipIndex = -1;
     this.kickWhiffed = false;
     this.quietCooldown = false;
@@ -151,6 +193,8 @@ export class Game {
     this.onCrystalsChange(0);
     this.onMoneyChange(this.money);
     this.onKickCountChange(this.kickCount);
+    this.onKissCountChange(this.kisses);
+    this.onLivesChange(this.lives);
   }
 
   start() {
@@ -167,15 +211,23 @@ export class Game {
     this.start();
   }
 
+  // Pausing and resuming funnel every input source (button, P/Esc, window
+  // blur, tab hidden) through one place, so the music hold always matches
+  // the game state. Only background songs are held — dialogue and the kick
+  // sound are never touched here.
   pause() {
     if (this.state === 'running') {
       this.setState('paused');
+      this.audio.pauseMusicForGame();
     }
   }
 
   resume() {
     if (this.state === 'paused') {
       this.setState('running');
+      // Continues the same track from its saved position, and only when the
+      // music is not in a terminal stop for this run.
+      this.audio.resumeMusicFromGame();
     }
   }
 
@@ -192,16 +244,38 @@ export class Game {
   // dialogue instead.
   handleJump() {
     if (this.state === 'running') {
-      const result = this.player.jump();
-      if (result === 'first') {
-        this.effects.jumpPuff(this.player.x + 20, GROUND_Y);
-        if (this.couple) {
-          this.girl.requestJump(0.07);
+      // Jump input drives whoever is still alive: normally Samuel leads and
+      // Ali answers a beat later; if Samuel has fallen, Ali carries the run.
+      const boyAlive = !this.player.dead;
+      const girlAlive = this.girl.active && !this.girl.dead;
+      let result = false;
+      if (boyAlive) {
+        result = this.player.jump();
+        if (result === 'first') {
+          this.effects.jumpPuff(this.player.x + 20, GROUND_Y);
+        } else if (result === 'second') {
+          this.effects.doubleJump(this.player.x + 20, this.player.y + this.player.height, NEON.pink);
+        } else if (result === 'third') {
+          // The family's third jump gets its own little celebration.
+          this.effects.familyJump(this.player.x + 20, this.player.y + this.player.height);
         }
-      } else if (result === 'second') {
-        this.effects.doubleJump(this.player.x + 20, this.player.y + this.player.height, NEON.pink);
-        if (this.couple) {
+      }
+      if (girlAlive) {
+        if (!boyAlive) {
           this.girl.requestJump(0.04);
+        } else if (result === 'first') {
+          this.girl.requestJump(0.07);
+        } else if (result === 'second' || result === 'third') {
+          this.girl.requestJump(0.04);
+        }
+      }
+      if (this.baby && !this.baby.dead) {
+        // Benjamin jumps with the family: his own first and second jump
+        // follow the family's jumps, and the family's third jump (only
+        // unlocked once he has joined) never gives him a third.
+        const familyJump = boyAlive ? result : 'first';
+        if (familyJump === 'first' || familyJump === 'second') {
+          this.baby.jump();
         }
       }
     } else if (this.state === 'reunion') {
@@ -211,18 +285,27 @@ export class Game {
     }
   }
 
-  // The kick is a solo-stage action. It also advances the reunion like the
-  // jump key, but it never starts or restarts a run.
+  // The kick is a solo-stage action: it never runs while the couple is
+  // together (that was the bug — the solo kick system firing in couple mode).
+  // There the same key shares a kiss instead, and it also advances the
+  // reunion, but it never starts or restarts a run.
   handleKick() {
     if (this.state === 'running') {
-      // Once the couple runs together the road is lined with props, so the
-      // kick has no target and stays out of the way.
-      if (!this.couple && this.player.kick()) {
+      if (this.couple) {
+        // The kiss needs both of them; a fallen family member silences it.
+        if (!this.player.dead && !this.girl.dead) {
+          this.startCoupleKiss();
+        }
+        return;
+      }
+      if (this.player.kick()) {
         this.kickWhiffed = false;
       }
     } else if (this.state === 'reunion') {
       this.advanceDialogue();
     }
+    // During a couple kiss the key does nothing: a fresh press after the
+    // animation ends starts the next one (Input only fires on a new press).
   }
 
   handleAdvance() {
@@ -238,6 +321,11 @@ export class Game {
       this.player.setDefeat();
       this.girl.setDefeat();
       this.effects.defeat(this.player.x + 20, this.player.y + 40);
+      // Terminal: silence the run for good (covers the hazard death and the
+      // loss of the last life). Only start() can bring music back.
+      this.audio.stopMusicForRun();
+      // The introduction marker never survives the end of a run.
+      this.babyIntro = null;
     }
     this.onStateChange(state);
   }
@@ -342,6 +430,56 @@ export class Game {
       }
     }
 
+    // The family's newest member trots along with them; the instruction sign
+    // counts its delay only while the couple actually runs.
+    if (this.baby && !this.baby.dead) {
+      // The road speed keeps his arrival in sync with the scrolling world.
+      this.baby.update(deltaTime, this.speed);
+      // The introduction marker only starts once he has really joined the
+      // running group, and it never repeats during the same run.
+      if (this.baby.state === 'run' && !this.babyIntro && !this.babyIntroDone) {
+        this.babyIntro = { t: 0 };
+      }
+    }
+    if (this.babyIntro) {
+      this.babyIntro.t += deltaTime;
+      if (this.babyIntro.t >= BABY_INTRO_DURATION + BABY_INTRO_FADE) {
+        this.babyIntro = null;
+        this.babyIntroDone = true;
+      }
+    }
+    if (this.coupleHint) {
+      this.coupleHint.t += deltaTime;
+      if (this.coupleHint.t > KISS_INSTRUCTION_DELAY + KISS_INSTRUCTION_HOLD + KISS_INSTRUCTION_FADE) {
+        this.coupleHint = null;
+      }
+    }
+
+    // Life grace: a single overlap or volley costs at most one life.
+    if (this.lifeGrace > 0) {
+      this.lifeGrace = Math.max(0, this.lifeGrace - deltaTime);
+    }
+
+    // Once the baby has actually joined the run, a short random delay arms
+    // the guerrilla survival event. The delay and the encounter only ever
+    // tick as real game time inside this loop — never per rendered frame.
+    if (this.baby && this.baby.state === 'run' && !this.survivalDelayStarted) {
+      this.survivalDelayStarted = true;
+      this.survivalDelay = SURVIVAL_DELAY_MIN
+        + Math.random() * (SURVIVAL_DELAY_MAX - SURVIVAL_DELAY_MIN);
+    }
+    if (this.survivalDelay !== null) {
+      this.survivalDelay -= deltaTime;
+      if (this.survivalDelay <= 0) {
+        this.survivalDelay = null;
+        this.startSurvival();
+      }
+    }
+    this.updateSurvival(deltaTime);
+    if (this.state !== 'running') {
+      return; // the ending or a game over took over this frame
+    }
+
     this.updateReunionTrigger();
 
     this.distance += travelDistance / PIXELS_PER_METER;
@@ -405,7 +543,9 @@ export class Game {
       this.spawnDistance = Math.max(this.spawnDistance, this.getNextHazardGap());
     }
 
-    if (!quiet && !(solo && this.crystals.complete)) {
+    // No new street props while the guerrilla event owns the road: the
+    // encounter is the only threat for those five seconds.
+    if (!quiet && !(solo && this.crystals.complete) && !this.survival) {
       this.spawnDistance -= travelDistance;
       if (this.spawnDistance <= 0) {
         this.spawnHazard();
@@ -420,15 +560,17 @@ export class Game {
       (hazard) => !hazard.remove && hazard.x + hazard.width > -80,
     );
 
-    const playerBounds = this.player.getBounds();
     // While the runner is committed to a kick he cannot be hit: the kick
     // either sweeps the rival away or the rival passes through him.
     if (this.player.kickGuard) {
       return;
     }
+    // Any living family member in the way costs a life — always consumed
+    // from the front of the death order by loseLife().
+    const family = this.familyBounds();
     for (const hazard of this.hazards) {
       const bounds = hazard.getBounds();
-      if (!bounds || !rectanglesOverlap(playerBounds, bounds)) {
+      if (!bounds || !family.some((box) => rectanglesOverlap(box, bounds))) {
         continue;
       }
       // A kicking leg sweeps the rival out of the way before it can hit the
@@ -436,7 +578,11 @@ export class Game {
       if (this.kickSweepsHazard(hazard)) {
         continue;
       }
-      this.setState('gameover');
+      if (this.couple) {
+        this.loseLife(hazard.x + hazard.width / 2, bounds.y + bounds.height / 2);
+      } else {
+        this.setState('gameover');
+      }
       return;
     }
   }
@@ -464,7 +610,17 @@ export class Game {
       return;
     }
     const variant = RIVAL_VARIANTS[Math.floor(Math.random() * RIVAL_VARIANTS.length)];
-    this.hazards.push(new Rival(x, GROUND_Y, variant));
+    const rival = new Rival(x, GROUND_Y, variant);
+    // One teasing line per kickable rival, assigned exactly once at spawn and
+    // rotated through the list so the comments stay varied. The sign lives on
+    // the entity: it follows her, dies with her, and never re-creates itself.
+    rival.sign = {
+      text: BITCH_SIGN_PHRASES[this.signPhraseIndex % BITCH_SIGN_PHRASES.length],
+      phase: Math.random() * 6.28,
+      lines: null,
+    };
+    this.signPhraseIndex += 1;
+    this.hazards.push(rival);
   }
 
   // The kick: resolve the active window against every hazard. Rivals tumble
@@ -599,7 +755,7 @@ export class Game {
   }
 
   updateCrystals() {
-    const playerBounds = this.player.getBounds();
+    const family = this.familyBounds();
     for (const entry of this.crystals.entries) {
       if (entry.collected) {
         continue;
@@ -609,7 +765,7 @@ export class Game {
         continue;
       }
       const bounds = this.crystals.boundsOf(entry, this.distance, this.visualTime);
-      if (rectanglesOverlap(playerBounds, bounds) && this.crystals.collect(entry)) {
+      if (family.some((box) => rectanglesOverlap(box, bounds)) && this.crystals.collect(entry)) {
         const bob = Math.sin(this.visualTime * 2 + entry.phase) * 5;
         this.effects.crystalCollect(x, GROUND_Y - entry.height + bob, entry.core.main);
         this.onCrystalsChange(this.crystals.collected);
@@ -617,7 +773,7 @@ export class Game {
         // new intensity, so the storm builds instead of snapping.
         this.updateRainIntensity();
         if (this.crystals.complete) {
-          this.announce('Los cuatro cristales. Ella te espera más adelante.');
+          this.announce('Los cinco cristales. Ella te espera más adelante.');
         } else {
           this.announce(`Cristal ${this.crystals.collected} de ${CRYSTAL_COUNT}.`);
         }
@@ -653,11 +809,11 @@ export class Game {
       });
     }
 
-    const playerBounds = this.player.getBounds();
+    const family = this.familyBounds();
     for (const heart of this.hearts) {
       heart.x -= travelDistance;
       const bounds = { x: heart.x, y: heart.y, width: 16, height: 16 };
-      if (!heart.collected && rectanglesOverlap(playerBounds, bounds)) {
+      if (!heart.collected && family.some((box) => rectanglesOverlap(box, bounds))) {
         heart.collected = true;
         this.heartCount += 1;
         this.onHeartsChange(this.heartCount);
@@ -800,16 +956,8 @@ export class Game {
         this.player.setState('kiss');
         this.girl.setState('kiss');
       }
-      if (!scene.kissFired && t >= OUTRO_STEP_END) {
-        scene.kissFired = true;
-        this.effects.kissSparkle(
-          (this.player.x + this.player.width / 2 + this.girl.x + this.girl.width / 2) / 2,
-          this.player.y + 12,
-        );
-      }
-      if (scene.kissFired && Math.random() < deltaTime * 2 && this.effects.particles.length < 70) {
-        const midX = (this.player.x + this.player.width / 2 + this.girl.x + this.girl.width / 2) / 2;
-        this.effects.kissSparkle(midX + (Math.random() - 0.5) * 44, this.player.y + 12 + Math.random() * 24);
+      if (t >= OUTRO_STEP_END) {
+        this.kissSparkleTick(scene, deltaTime);
       }
     } else if (t < OUTRO_PART_END) {
       // The kiss animation has finished: the reunion song takes over and
@@ -942,8 +1090,337 @@ export class Game {
     this.player.x = PLAYER_X;
     this.girl.startTogether(this.player.x);
     this.spawnDistance = this.getNextHazardGap();
+    // The instruction sign starts its two-second count only now, when the
+    // couple run actually begins.
+    this.coupleHint = { t: 0 };
+    // The family takes the road with two lives, always lost in the fixed
+    // order: Samuel first, then Ali.
+    this.lifeOrder = ['boy', 'ali'];
+    this.lives = 2;
+    this.onLivesChange(this.lives);
     this.setState('running');
-    this.announce('Ahora juntos. Pulsa dos veces para el doble salto.');
+    // One source of truth: the toast and the instruction sign share the text.
+    this.announce(KISS_INSTRUCTION_TEXT);
+  }
+
+  // The couple's own kiss: pressing X while they run together freezes the
+  // world exactly like the reunion scene, both turn toward each other and
+  // play the same kiss animation, then the run resumes from the exact spot
+  // they stopped at. It never touches the dialogue, the reunion or the music.
+  startCoupleKiss() {
+    if (this.state !== 'running' || !this.couple || this.coupleKiss) {
+      return false;
+    }
+    this.coupleKiss = { t: 0, kissFired: false };
+    this.setState('couplekiss');
+    return true;
+  }
+
+  updateCoupleKiss(deltaTime) {
+    const scene = this.coupleKiss;
+    if (!scene) {
+      return;
+    }
+    scene.t += deltaTime;
+    const t = scene.t;
+    // Same curve as the reunion outro: a short beat to turn, then the lean.
+    const kissT = clamp01((t - 0.16) / Math.max(0.001, OUTRO_STEP_END - 0.16));
+    this.player.kissT = kissT;
+    this.girl.kissT = kissT;
+    if (t < OUTRO_KISS_END) {
+      this.player.setState('kiss');
+      this.girl.setState('kiss');
+      if (t >= OUTRO_STEP_END) {
+        this.kissSparkleTick(scene, deltaTime);
+      }
+    } else {
+      this.finishCoupleKiss();
+    }
+  }
+
+  finishCoupleKiss() {
+    this.coupleKiss = null;
+    this.player.kissT = 0;
+    this.girl.kissT = 0;
+    // Straight back into the shared run: same positions, same progress.
+    this.player.setState('together');
+    this.girl.setState('together');
+    this.setState('running');
+    // A kiss counts only once it has fully played — never for a key press or
+    // an interrupted scene.
+    this.kisses += 1;
+    this.onKissCountChange(this.kisses);
+    if (this.kisses >= KISSES_REQUIRED_FOR_BABY && !this.babyRevealed) {
+      this.revealBaby();
+    }
+  }
+
+  // The kiss that reaches the target brings the baby in from behind: the
+  // family gains its third member and, with it, the triple jump. Nothing
+  // else resets — the crystals, the music and the run's progress stay as
+  // they are. Revoked permanently if Samuel fell before this moment.
+  revealBaby() {
+    if (this.babyRevealed || this.babyLocked) {
+      return;
+    }
+    this.babyRevealed = true;
+    this.baby = new Baby(this.player.x - 92);
+    this.player.unlockTripleJump();
+    this.girl.unlockTripleJump();
+    // The baby joins the life order immediately: he is the third life from
+    // the moment he appears, even mid-arrival.
+    this.lifeOrder.push('baby');
+    this.lives = this.lifeOrder.length;
+    this.onLivesChange(this.lives);
+    this.effects.meetBurst(this.player.x - 40, GROUND_Y - 46);
+    this.announce('¡Llegó el bebé! Ya pueden saltar tres veces.');
+  }
+
+  // Shared by the reunion outro and the couple's mid-run kiss: one sparkle
+  // burst when the kiss lands, then a light shimmer while they hold it.
+  kissSparkleTick(scene, deltaTime) {
+    const midX = (this.player.x + this.player.width / 2 + this.girl.x + this.girl.width / 2) / 2;
+    const kissY = this.player.y + 12;
+    if (!scene.kissFired) {
+      scene.kissFired = true;
+      this.effects.kissSparkle(midX, kissY);
+    } else if (Math.random() < deltaTime * 2 && this.effects.particles.length < 70) {
+      this.effects.kissSparkle(midX + (Math.random() - 0.5) * 44, kissY + Math.random() * 24);
+    }
+  }
+
+  // --- Family life system (couple stage) ---------------------------------
+
+  // Collision boxes for every living family member. All damage flows
+  // through loseLife(), which pops the next character from the fixed death
+  // order — Samuel, then Ali, then the baby — so one event can never take
+  // two lives and the order can never drift.
+  familyBounds() {
+    const boxes = [];
+    if (!this.player.dead) {
+      boxes.push(this.player.getBounds());
+    }
+    if (this.girl.active && !this.girl.dead) {
+      boxes.push(this.girl.getBounds());
+    }
+    if (this.baby && !this.baby.dead) {
+      boxes.push(this.baby.getBounds());
+    }
+    return boxes;
+  }
+
+  loseLife(hitX, hitY) {
+    if (this.state !== 'running' || this.lifeGrace > 0 || this.lifeOrder.length === 0) {
+      return false;
+    }
+    const who = this.lifeOrder.shift();
+    this.lives = this.lifeOrder.length;
+    this.onLivesChange(this.lives);
+    this.lifeGrace = LIFE_GRACE_SECONDS;
+
+    if (who === 'boy') {
+      this.player.dead = true;
+      if (!this.babyRevealed) {
+        // Samuel fell before the baby joined: the unlock is revoked for the
+        // rest of this run — no later kiss, timer or callback can spawn it.
+        this.babyLocked = true;
+      }
+      this.effects.defeat(this.player.x + 20, this.player.y + 40);
+      this.announce('¡Cayó Samuel! La familia sigue.');
+    } else if (who === 'ali') {
+      this.girl.dead = true;
+      this.effects.defeat(this.girl.x + 18, this.girl.y + 36);
+      this.announce('¡Cayó Ali!');
+    } else {
+      this.baby.dead = true;
+      this.effects.defeat(this.baby.x + 11, this.baby.y + 16);
+      this.babyIntro = null;
+      this.announce('¡Cayó el bebé!');
+    }
+
+    if (this.lives <= 0) {
+      // Normal game over: nothing here can ever reach the special ending.
+      this.survival = null;
+      this.survivalDelay = null;
+      this.guerrillas = [];
+      this.survivalShots = [];
+      this.setState('gameover');
+    }
+    return true;
+  }
+
+  // --- Guerrilla survival event ------------------------------------------
+
+  // Armed only from the baby's arrival path, once per run: the delay is
+  // randomised inside the configured 3–5 s window and only ticks as game
+  // time while the couple actually runs.
+  startSurvival() {
+    if (this.survival || this.state !== 'running' || this.endingScene) {
+      return false;
+    }
+    this.survival = { phase: 'warning', t: 0, elapsed: 0, started: false };
+    // Readable cue: a toast, a short jolt and two fighters jogging in from
+    // beyond the right edge, far away from the family.
+    this.announce('¡Guerrillas! Sobrevive 5 segundos.');
+    this.shake = KICK_SHAKE;
+    this.spawnGuerrilla(700, 690, SURVIVAL_WARNING_SECONDS + 0.3 + Math.random() * 0.4);
+    this.spawnGuerrilla(850, 830, SURVIVAL_WARNING_SECONDS + 0.9 + Math.random() * 0.4);
+    for (const guerrilla of this.guerrillas) {
+      this.effects.jumpPuff(guerrilla.x + 19, GROUND_Y);
+    }
+    return true;
+  }
+
+  spawnGuerrilla(spawnX, targetX, firstThrowDelay) {
+    if (this.guerrillas.length >= SURVIVAL_MAX_ENEMIES) {
+      return;
+    }
+    this.guerrillas.push(new Guerrilla(spawnX, GROUND_Y, targetX, firstThrowDelay));
+  }
+
+  updateSurvival(deltaTime) {
+    const scene = this.survival;
+    if (!scene || this.state !== 'running') {
+      return;
+    }
+    scene.t += deltaTime;
+
+    if (scene.phase === 'warning') {
+      // The fighters run in and take their stances; nothing flies yet.
+      this.updateGuerrillas(deltaTime);
+      if (scene.t >= SURVIVAL_WARNING_SECONDS) {
+        scene.phase = 'active';
+        scene.started = true;
+        // The five-second clock starts exactly here, with the first enemy
+        // active — the 3–5 s approach delay is never counted.
+        scene.elapsed = 0;
+      }
+      return;
+    }
+
+    scene.elapsed += deltaTime;
+    this.updateGuerrillas(deltaTime);
+    this.updateSurvivalShots(deltaTime);
+    if (scene.elapsed >= SURVIVAL_SECONDS) {
+      this.startEnding();
+    }
+  }
+
+  updateGuerrillas(deltaTime) {
+    for (const guerrilla of this.guerrillas) {
+      const fired = guerrilla.update(deltaTime);
+      for (const shot of fired) {
+        this.spawnSurvivalShot(guerrilla);
+      }
+    }
+  }
+
+  spawnSurvivalShot(guerrilla) {
+    const originX = guerrilla.x - 10;
+    this.survivalShots.push({
+      x: originX,
+      y: GROUND_Y - SURVIVAL_SHOT_UP,
+      width: SURVIVAL_SHOT_WIDTH,
+      height: SURVIVAL_SHOT_HEIGHT,
+      vx: -SURVIVAL_SHOT_SPEED,
+      spin: 0,
+      spent: false,
+    });
+    this.effects.jumpPuff(originX + 6, GROUND_Y - SURVIVAL_SHOT_UP + 6);
+  }
+
+  updateSurvivalShots(deltaTime) {
+    const family = this.familyBounds();
+    for (const shot of this.survivalShots) {
+      shot.x += shot.vx * deltaTime;
+      shot.spin += deltaTime * 16;
+      if (!shot.spent && family.some((box) => rectanglesOverlap(box, shot))) {
+        // One projectile is spent on contact, and the grace window keeps any
+        // other shot in the same frame from taking a second life.
+        shot.spent = true;
+        this.loseLife(shot.x + shot.width / 2, shot.y + shot.height / 2);
+      }
+    }
+    this.survivalShots = this.survivalShots.filter(
+      (shot) => !shot.spent && shot.x + shot.width > -30,
+    );
+  }
+
+  // --- Secret "Continuará..." ending -------------------------------------
+
+  // Reached only by surviving the full five seconds. Everything pending is
+  // cancelled here so no attack, timer or spawn can outlive the transition.
+  startEnding() {
+    if (this.state !== 'running' || this.endingScene) {
+      return false;
+    }
+    this.survival = null;
+    this.survivalDelay = null;
+    this.guerrillas = [];
+    this.survivalShots = [];
+    this.hazards = [];
+    this.coupleHint = null;
+    this.babyIntro = null;
+    const boyAlive = !this.player.dead;
+    const girlAlive = this.girl.active && !this.girl.dead;
+    this.endingScene = {
+      t: 0,
+      kissFired: false,
+      startBoyX: this.player.x,
+      startGirlX: this.girl.x,
+      startBabyX: this.baby ? this.baby.x : 0,
+      boyAlive,
+      girlAlive,
+      // The composition is about the couple; the baby only shows when he is
+      // the sole survivor of the chaos.
+      showBaby: !(boyAlive && girlAlive) && Boolean(this.baby) && !this.baby.dead,
+    };
+    this.setState('ending');
+    // The secret ending is terminal too: the final frame stays silent until
+    // the player starts a genuinely new run.
+    this.audio.stopMusicForRun();
+    return true;
+  }
+
+  // The final frame belongs to Samuel and Ali: the baby steps out of it
+  // unless he is the last family member standing.
+  endingBabyHidden() {
+    return this.state === 'ending' && this.endingScene !== null
+      && !this.endingScene.showBaby;
+  }
+
+  updateEnding(deltaTime) {
+    const scene = this.endingScene;
+    if (!scene) {
+      return;
+    }
+    scene.t += deltaTime;
+    // Ease the survivors to the centre of the frame...
+    const move = easeInOut(clamp01(scene.t / ENDING_ZOOM_SECONDS));
+    if (scene.boyAlive) {
+      this.player.x = lerp(scene.startBoyX, ENDING_BOY_X, move);
+    }
+    if (scene.girlAlive) {
+      this.girl.x = lerp(scene.startGirlX, ENDING_GIRL_X, move);
+    }
+    if (scene.showBaby && this.baby) {
+      this.baby.x = lerp(scene.startBabyX, ENDING_GIRL_X - 44, move);
+    }
+    // ...then the same kiss animation the reunion used, once they arrive.
+    const kissT = clamp01((scene.t - ENDING_KISS_AT) / 0.6);
+    this.player.kissT = kissT;
+    this.girl.kissT = kissT;
+    if (scene.t >= ENDING_KISS_AT) {
+      if (scene.boyAlive && scene.girlAlive) {
+        this.player.setState('kiss');
+        this.girl.setState('kiss');
+        this.kissSparkleTick(scene, deltaTime);
+      } else if (scene.boyAlive) {
+        this.player.setState('idle');
+      } else if (scene.girlAlive) {
+        this.girl.setState('idle');
+      }
+    }
   }
 
   updateVisual(deltaTime) {
@@ -959,6 +1436,12 @@ export class Game {
     this.girl.updateVisual(deltaTime);
     if (this.reunion) {
       this.updateReunion(deltaTime);
+    }
+    if (this.coupleKiss) {
+      this.updateCoupleKiss(deltaTime);
+    }
+    if (this.state === 'ending') {
+      this.updateEnding(deltaTime);
     }
 
     // The screen shake decays quickly so it punctuates the hit without
@@ -989,8 +1472,21 @@ export class Game {
   }
 
   // Camera cut: eases from the full frame into a 16:9 crop centred on the two
-  // of them, then pulls back as the reunion ends.
+  // of them, then pulls back as the reunion ends. The secret ending gets its
+  // own fixed cinematic crop, framed on the couple after they centre up.
   get cameraCrop() {
+    if (this.state === 'ending' && this.endingScene) {
+      const zoom = easeInOut(clamp01(this.endingScene.t / ENDING_ZOOM_SECONDS));
+      if (zoom < 0.02) {
+        return null;
+      }
+      return {
+        x: lerp(0, ENDING_CROP.x, zoom),
+        y: lerp(0, ENDING_CROP.y, zoom),
+        width: lerp(480, ENDING_CROP.width, zoom),
+        height: lerp(270, ENDING_CROP.height, zoom),
+      };
+    }
     const scene = this.reunion;
     if (!scene) {
       return null;
@@ -1038,9 +1534,17 @@ export class Game {
 
     this.girl.drawShadow(view);
     this.player.drawShadow(view);
-    this.girl.draw(view, { flip: girlFlip });
+    if (!this.girl.dead) {
+      this.girl.draw(view, { flip: girlFlip });
+    }
+    if (this.baby && !this.baby.dead && !this.endingBabyHidden()) {
+      this.baby.draw(view);
+    }
     for (const hazard of this.hazards) {
       hazard.draw(view, this.visualTime);
+    }
+    for (const guerrilla of this.guerrillas) {
+      guerrilla.draw(view);
     }
     if (this.robber) {
       this.robber.draw(view);
@@ -1052,9 +1556,19 @@ export class Game {
       view.rect(heart.x + 4, heart.y + bob, 4, 2, NEON.white);
     }
     this.crystals.draw(view, this.distance, this.visualTime);
-    // He always faces right — she is on his right through the whole reunion,
-    // so mirroring him here would make him kiss empty space.
-    this.player.draw(view);
+    // He faces the direction of travel — except when he turns to her: during
+    // the couple's kiss and the final embrace she is on his left, so
+    // mirroring him there turns them toward each other instead of kissing
+    // empty air.
+    if (!this.player.dead) {
+      this.player.draw(view, {
+        flip: this.state === 'couplekiss'
+          || (this.state === 'ending' && this.player.state === 'kiss'),
+      });
+    }
+    for (const shot of this.survivalShots) {
+      drawChancleta(view, shot, this.visualTime);
+    }
     this.effects.draw(view);
     // The kick comments sit on top of the world, next to the impact.
     this.comments.draw(view);
@@ -1078,6 +1592,86 @@ export class Game {
         drawDialogueBox(view, beat, this.reunion.beatTime, beat.hold, !this.reunion.voiceBlocked);
       }
     }
+    this.drawCoupleHint(view);
+    this.drawBabyIntro(view);
     view.present();
+  }
+
+  // The pixel instruction sign: two seconds after the couple starts running
+  // it appears above the action — clear of the HUD, the characters and the
+  // kiss — holds long enough to read, then fades out once.
+  drawCoupleHint(view) {
+    const hint = this.coupleHint;
+    if (!hint) {
+      return;
+    }
+    const delayEnd = KISS_INSTRUCTION_DELAY;
+    const holdEnd = delayEnd + KISS_INSTRUCTION_HOLD;
+    const fadeEnd = holdEnd + KISS_INSTRUCTION_FADE;
+    if (hint.t < delayEnd || hint.t > fadeEnd) {
+      return;
+    }
+    const alpha = hint.t <= holdEnd ? 1 : 1 - (hint.t - holdEnd) / KISS_INSTRUCTION_FADE;
+    const text = KISS_INSTRUCTION_TEXT;
+    const width = measureText(text, 2) + 34;
+    const centerX = GAME_WIDTH / 2;
+    const y = 150 + Math.sin(this.visualTime * 1.6) * 2;
+    // A hanging wooden plank with corner bolts, like the road signs.
+    view.rect(centerX - width / 2, y, width, 34, '#5B3A22', alpha);
+    view.rect(centerX - width / 2, y, width, 2, '#7A4E2E', alpha);
+    view.rect(centerX - width / 2 + 3, y + 3, width - 6, 28, '#3A2414', alpha);
+    view.rect(centerX - width / 2 + 6, y + 7, 3, 3, '#FFE9C9', alpha * 0.7);
+    view.rect(centerX + width / 2 - 9, y + 7, 3, 3, '#FFE9C9', alpha * 0.7);
+    view.rect(centerX - width / 2 + 6, y + 24, 3, 3, '#FFE9C9', alpha * 0.7);
+    view.rect(centerX + width / 2 - 9, y + 24, 3, 3, '#FFE9C9', alpha * 0.7);
+    drawText(view, text, centerX, y + 9, {
+      unit: 2, color: '#FFE9C9', align: 'center', alpha, shadow: '#1B1230',
+    });
+  }
+
+  // Benjamin's introduction marker: a chunky pixel arrow pointing straight
+  // at him with his name on a small plate above his head. It follows his
+  // live position (so it tracks him through his jump), never covers his
+  // face or his parents, and fades out once its short life is over.
+  drawBabyIntro(view) {
+    const intro = this.babyIntro;
+    if (!intro || !this.baby || this.baby.dead) {
+      return;
+    }
+    const alpha = intro.t <= BABY_INTRO_DURATION
+      ? 1
+      : Math.max(0, 1 - (intro.t - BABY_INTRO_DURATION) / BABY_INTRO_FADE);
+    if (alpha <= 0) {
+      return;
+    }
+
+    const centerX = this.baby.x + this.baby.width / 2;
+    // Above his head, with a small bob so it feels alive.
+    const labelY = this.baby.y - 74 + Math.sin(this.visualTime * 3.4) * 2;
+    const width = measureText(BABY_INTRO_TEXT, 2) + 20;
+    const left = Math.max(4, Math.min(GAME_WIDTH - width - 4, centerX - width / 2));
+
+    // Dark plate with a pink border: readable over both the dark storm and
+    // the bright colonial street.
+    view.rect(left, labelY - 7, width, 30, '#150C2E', 0.9 * alpha);
+    view.rect(left, labelY - 7, width, 3, '#FF38B8', alpha);
+    view.rect(left, labelY + 20, width, 3, '#FF38B8', alpha);
+    view.rect(left, labelY - 7, 3, 30, '#FF38B8', alpha);
+    view.rect(left + width - 3, labelY - 7, 3, 30, '#FF38B8', alpha);
+    drawText(view, BABY_INTRO_TEXT, left + width / 2, labelY + 1, {
+      unit: 2, color: '#FFE9C9', align: 'center', alpha, shadow: '#3A0A28',
+    });
+
+    // The arrow: a dark outlined triangle that always points down at him.
+    const arrowTop = labelY + 27;
+    for (let row = 0; row < 4; row += 1) {
+      const half = 9 - row * 2;
+      view.rect(centerX - half - 1, arrowTop + row * 3, half * 2 + 3, 3, '#150C2E', alpha);
+    }
+    for (let row = 0; row < 4; row += 1) {
+      const half = 8 - row * 2;
+      view.rect(centerX - half, arrowTop + row * 3, half * 2, 3, '#FF38B8', alpha);
+    }
+    view.rect(centerX - 1, arrowTop + 12, 3, 4, '#FF38B8', alpha);
   }
 }

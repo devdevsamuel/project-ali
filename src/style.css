@@ -116,6 +116,7 @@ canvas {
 
 .hud-stats {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 
@@ -177,6 +178,17 @@ canvas {
   color: #ffe66d;
 }
 
+/* The kiss counter glows in Ali's pink and only ever reads up to 4/4. */
+.hud-kisses strong {
+  color: #ff8fc6;
+}
+
+/* One heart per living family member; hidden until the couple takes the
+   road so it can never be confused with the collected-hearts counter. */
+.hud-lives strong {
+  color: #ff5fa8;
+}
+
 .small-button {
   padding: 0.45rem 0.8rem;
   pointer-events: auto;
@@ -217,6 +229,40 @@ canvas {
 .panel .hint {
   color: #b7ff4a;
   font-size: 0.9rem;
+}
+
+/* Secret "Continuará..." ending: title on top, the kissing couple visible
+   through the clear middle, and a clearly separate restart control below.
+   Overrides the plain overlay so the cinematic stays readable. */
+.ending-overlay {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: clamp(0.75rem, 4vh, 2.5rem) 1rem;
+  background: linear-gradient(
+    180deg,
+    rgb(17 8 36 / 78%) 0%,
+    rgb(17 8 36 / 8%) 30%,
+    rgb(17 8 36 / 8%) 62%,
+    rgb(17 8 36 / 80%) 100%
+  );
+  backdrop-filter: none;
+}
+
+.ending-title {
+  color: #ff69d4;
+  font-size: clamp(2rem, 8vw, 4rem);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-shadow:
+    0 0 18px rgb(255 56 184 / 60%),
+    0 0 44px rgb(255 56 184 / 30%);
+}
+
+.ending-actions {
+  display: flex;
+  gap: 0.75rem;
 }
 
 .toast {

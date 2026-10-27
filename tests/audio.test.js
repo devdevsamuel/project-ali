@@ -44,7 +44,7 @@ function createCanvas() {
     globalAlpha: 1,
     fillStyle: '',
     imageSmoothingEnabled: false,
-    setTransform() {}, save() {}, restore() {}, clearRect() {}, fillRect() {},
+    setTransform() {}, translate() {}, save() {}, restore() {}, clearRect() {}, fillRect() {},
     drawImage() {},
     createLinearGradient() { return { addColorStop() {} }; },
     createRadialGradient() { return { addColorStop() {} }; },
@@ -82,7 +82,9 @@ Math.random = () => {
 const { AudioManager } = await import('../src/game/Audio.js');
 const { Game } = await import('../src/game/Game.js');
 const { Rival } = await import('../src/game/Rival.js');
-const { GROUND_Y, OUTRO_KISS_END } = await import('../src/game/config.js');
+const {
+  GROUND_Y, OUTRO_KISS_END, CRYSTAL_COUNT, ENABLE_DIALOGUE_VOICES,
+} = await import('../src/game/config.js');
 
 function createGame() {
   const game = new Game(createCanvas(), {
@@ -150,6 +152,19 @@ test('dialogue voice: one recording at a time, queued rather than overlapped', (
   const audio = new AudioManager();
   audio.unlock();
 
+  if (!ENABLE_DIALOGUE_VOICES) {
+    // Voices are switched off: nothing is created, nothing plays, and the
+    // manager reports idle so the written dialogue never waits for audio.
+    audio.speak('boy');
+    audio.speak('ali');
+    assert.equal(audio.tracks.get('samuel'), undefined, 'no voice element is created');
+    assert.equal(audio.tracks.get('ali'), undefined, 'no voice element is created');
+    assert.equal(audio.isVoiceIdle(), true, 'the dialogue is never blocked');
+    assert.equal(audio.voice, null);
+    assert.equal(audio.pendingVoice, null);
+    return;
+  }
+
   audio.speak('boy');
   const samuel = audio.tracks.get('samuel');
   assert.equal(samuel.playCount, 1, "Samuel's recording starts with his line");
@@ -207,11 +222,19 @@ test('audio requested before the first gesture starts after the unlock', () => {
   audio.playMusic('solo');
   assert.equal(audio.tracks.get('solo').paused, true, 'autoplay policy respected');
   audio.speak('boy');
-  assert.equal(audio.tracks.get('samuel').paused, true);
+  if (ENABLE_DIALOGUE_VOICES) {
+    assert.equal(audio.tracks.get('samuel').paused, true);
+  } else {
+    assert.equal(audio.tracks.get('samuel'), undefined, 'no voice is queued while muted');
+  }
 
   audio.unlock();
   assert.equal(audio.tracks.get('solo').paused, false, 'the pending song starts');
-  assert.equal(audio.tracks.get('samuel').playCount, 1, 'the pending line starts');
+  if (ENABLE_DIALOGUE_VOICES) {
+    assert.equal(audio.tracks.get('samuel').playCount, 1, 'the pending line starts');
+  } else {
+    assert.equal(audio.tracks.get('samuel'), undefined, 'muted voices stay silent');
+  }
 });
 
 test('a failing track is reported once and stays silent', () => {
@@ -241,8 +264,8 @@ test('full flow: solo theme, pause at the reunion, reunion song after the kiss',
   assert.equal(solo.paused, false, 'Sin Ti plays during the solo journey');
   assert.equal(game.audio.music, 'solo');
 
-  // Collect the four crystals by walking each one onto the runner.
-  for (let index = 0; index < 4; index += 1) {
+  // Collect the required crystals by walking each one onto the runner.
+  for (let index = 0; index < CRYSTAL_COUNT; index += 1) {
     const entry = game.crystals.entries.find((candidate) => !candidate.collected);
     entry.distance = game.distance;
     entry.height = 52;
@@ -259,10 +282,19 @@ test('full flow: solo theme, pause at the reunion, reunion song after the kiss',
     'the reunion song is not even requested yet',
   );
 
-  // Samuel's voice starts with his first line.
+  // Samuel's voice starts with his first line — unless the voices are muted,
+  // in which case the written dialogue runs exactly the same way.
   assert.ok(stepUntil(game, () => game.reunion && game.reunion.phase === 'dialogue'));
-  const samuel = game.audio.tracks.get('samuel');
-  assert.equal(samuel.playCount, 1, "Samuel's recording plays in the scene");
+  if (ENABLE_DIALOGUE_VOICES) {
+    const samuel = game.audio.tracks.get('samuel');
+    assert.equal(samuel.playCount, 1, "Samuel's recording plays in the scene");
+  } else {
+    assert.equal(
+      game.audio.tracks.get('samuel'), undefined,
+      'no recorded voice plays while the voices are switched off',
+    );
+    assert.equal(game.audio.isVoiceIdle(), true, 'the dialogue is never blocked');
+  }
   assert.equal(solo.paused, true, 'the solo theme stays off during the dialogue');
   assert.equal(
     game.audio.tracks.get('couple'), undefined,
@@ -272,7 +304,10 @@ test('full flow: solo theme, pause at the reunion, reunion song after the kiss',
   // This build keeps the scene moving on its own, so the beats run to the
   // outro without input; the conversation's recording is cut when it ends.
   assert.ok(stepUntil(game, () => game.reunion && game.reunion.phase === 'outro', 4000));
-  assert.equal(samuel.paused, true, 'the voice stops when the conversation ends');
+  if (ENABLE_DIALOGUE_VOICES) {
+    const samuel = game.audio.tracks.get('samuel');
+    assert.equal(samuel.paused, true, 'the voice stops when the conversation ends');
+  }
   assert.equal(
     game.audio.tracks.get('couple'), undefined,
     'not before the kiss finishes',
@@ -293,7 +328,14 @@ test('full flow: solo theme, pause at the reunion, reunion song after the kiss',
   assert.ok(stepUntil(game, () => game.state === 'running' && game.couple, 800));
   assert.equal(couple.playCount, 1, 'no duplicate playback across the scene change');
   assert.equal(couple.paused, false, 'the song keeps running while they run together');
-  assert.equal(samuel.playCount, 1, "Samuel's line never replayed");
+  if (ENABLE_DIALOGUE_VOICES) {
+    assert.equal(game.audio.tracks.get('samuel').playCount, 1, "Samuel's line never replayed");
+  } else {
+    assert.equal(
+      game.audio.tracks.get('samuel'), undefined,
+      'no recorded voice was ever started',
+    );
+  }
 });
 
 test('restarting the game resets the music state', () => {

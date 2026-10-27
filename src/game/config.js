@@ -10,8 +10,8 @@ export const ART = 2;
 export const PLAYER_X = 150;
 
 // Four crystals mark the solo section; the girl waits just past the last one.
-export const CRYSTAL_COUNT = 4;
-export const CRYSTAL_DISTANCES = [26, 62, 104, 148];
+export const CRYSTAL_COUNT = 5;
+export const CRYSTAL_DISTANCES = [26, 62, 104, 148, 190];
   // A crystal the runner outruns comes back a little later, so the reunion can
 // never become unreachable.
 export const CRYSTAL_RESPAWN_GAP = 38;
@@ -122,18 +122,79 @@ export const GIRL_KISS_STEP = 22;
 export const BEAT_HOLD = 0.45;
 // Ali's deliberate silence before she answers (beat 5).
 export const ALI_THINK_SECONDS = 2.6;
-// Seconds the world takes to wake up into the white city after the fourth
+// Seconds the world takes to wake up into the white city after the fifth
 // crystal.
 export const AWAKEN_SECONDS = 6;
 
 // Distance over which the background lighting/color gradually evolves.
 export const PROGRESS_DISTANCE = 500;
 
+// Kisses: the couple's own objective. Completed kisses needed before the baby
+// joins the run. The counter, the HUD, the instruction sign and the unlock
+// check all read this one value.
+export const KISSES_REQUIRED_FOR_BABY = 4;
+// The instruction sign appears two seconds into the couple run, stays long
+// enough to read, then fades out once.
+export const KISS_INSTRUCTION_DELAY = 2;
+export const KISS_INSTRUCTION_HOLD = 4.5;
+export const KISS_INSTRUCTION_FADE = 1.4;
+export const KISS_INSTRUCTION_TEXT = 'Ahora oprime X para más besitos, llega a 4 para conocer a nuestro bebé ;)';
+
+// --- Dialogue voices ------------------------------------------------------
+// Temporary switch: the recorded voices (Samuel and Ali) can be muted
+// without touching the written dialogue, the timing of the reunion scene or
+// the background music. Set it back to true to hear the recordings again —
+// the dialogue system needs no other change.
+export const ENABLE_DIALOGUE_VOICES = false;
+
+// --- Benjamin's introduction marker -------------------------------------
+// A temporary arrow and label that points him out when he joins the family.
+export const BABY_INTRO_DURATION = 5;
+export const BABY_INTRO_FADE = 1;
+export const BABY_INTRO_TEXT = 'Benjamin';
+
+// --- Family life system (couple stage only) -----------------------------
+// One damage event consumes at most one life; this grace keeps a single
+// overlap or a volley of projectiles from wiping the family in one frame.
+export const LIFE_GRACE_SECONDS = 0.9;
+
+// --- Guerrilla survival event (starts only after the baby joins) --------
+export const SURVIVAL_DELAY_MIN = 3;
+export const SURVIVAL_DELAY_MAX = 5;
+export const SURVIVAL_WARNING_SECONDS = 1.4;
+export const SURVIVAL_SECONDS = 5;
+export const SURVIVAL_SHOT_SPEED = 520;
+export const SURVIVAL_SHOT_UP = 30;
+export const SURVIVAL_SHOT_HEIGHT = 14;
+export const SURVIVAL_SHOT_WIDTH = 16;
+export const SURVIVAL_THROW_INTERVAL = 1.7;
+export const SURVIVAL_MAX_ENEMIES = 2;
+
+// --- Secret "Continuará..." ending --------------------------------------
+export const ENDING_TITLE = 'Continuará...';
+// Final centred layout: she keeps her spot on his left, pair centred at 480.
+export const ENDING_GIRL_X = 437;
+export const ENDING_BOY_X = 483;
+export const ENDING_ZOOM_SECONDS = 1;
+export const ENDING_KISS_AT = 0.9;
+// Cinematic crop (buffer pixels, 16:9) framed on the centred couple.
+export const ENDING_CROP = { x: 152, y: 126, width: 176, height: 99 };
+
+// Teasing one-liners the kickable rivals say as Samuel runs past. Rotated
+// across spawns so no two neighbours repeat.
+export const BITCH_SIGN_PHRASES = [
+  'Como ven, guapo',
+  "Pa' dónde tan solito",
+  '¿Y esa soledad, papi?',
+  'Vení, que no mordemos',
+];
+
 // Audio assets (hosted files provided for the project). Kept here so the
 // URLs stay configurable and out of the gameplay code.
 export const AUDIO_ASSETS = {
   kick: 'https://firebasestorage.googleapis.com/v0/b/portfolio-bedf9.firebasestorage.app/o/project-ali%2Fmuerebich.ogg?alt=media&token=420b1d26-6287-4531-8fa1-2d7fd2c5a9b2',
-  samuel: 'https://firebasestorage.googleapis.com/v0/b/portfolio-bedf9.firebasestorage.app/o/project-ali%2Faudio-samuel.ogg?alt=media&token=90de5b79-0c45-452f-bc93-e8fe95dd22bf',
+  // Samuel's reunion line (first spoken turn with Ali), replaced 2026-10-27.
+  samuel: 'https://firebasestorage.googleapis.com/v0/b/portfolio-bedf9.firebasestorage.app/o/project-ali%2FWhatsApp%20Ptt%202026-10-27%20at%2011.15.06%20AM.ogg?alt=media&token=7246457b-29db-402d-8ac5-099b4cb595ea',
   ali: 'https://firebasestorage.googleapis.com/v0/b/portfolio-bedf9.firebasestorage.app/o/project-ali%2Faudio-ali.ogg?alt=media&token=c4ea0e8b-1c68-4a4d-b3c6-9b60f359309c',
   solo: 'https://firebasestorage.googleapis.com/v0/b/portfolio-bedf9.firebasestorage.app/o/project-ali%2FSin%20Ti.mp3?alt=media&token=1962d3c1-0855-4f6c-b280-f8f014172ca9',
   couple: 'https://firebasestorage.googleapis.com/v0/b/portfolio-bedf9.firebasestorage.app/o/project-ali%2FContigo.mp3?alt=media&token=11278bd2-78d9-4479-a400-0e44f5427b5e',
@@ -148,13 +209,13 @@ export const AUDIO_VOLUMES = {
   couple: 0.45,
 };
 
-// Target duration for each dialogue recording, in seconds. The manager reads
-// the real length from the file and sets playbackRate so each turn lasts
-// about this long. Rates are clamped so speech is never sped up — slowing a
-// line slightly keeps the principal character easy to follow — and both
-// recordings always play to the end.
+// Target duration for each dialogue recording, in seconds — taken from the
+// real file lengths (ffprobe): samuel 7.7265s, ali 7.0465s. The manager reads
+// the length at load and sets playbackRate so each turn lasts about this long,
+// which lands on natural speed for both files. Rates are clamped so speech is
+// never sped up, and both recordings always play to the end.
 export const VOICE_TARGET_SECONDS = {
-  samuel: 6,
+  samuel: 7.7,
   ali: 7.5,
 };
 export const VOICE_RATE_MIN = 0.85;

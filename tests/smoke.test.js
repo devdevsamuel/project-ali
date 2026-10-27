@@ -61,7 +61,7 @@ const { Rival } = await import('../src/game/Rival.js');
 const { Obstacle, COUPLE_VARIANTS } = await import('../src/game/Obstacle.js');
 const {
   GAME_WIDTH, GROUND_Y, KICK_QUIPS, KICK_ACTIVE_START, KICK_ACTIVE_END,
-  KICK_SUCCESS_TARGET,
+  KICK_SUCCESS_TARGET, CRYSTAL_COUNT,
 } = await import('../src/game/config.js');
 
 function createGame(notices = []) {
@@ -89,8 +89,8 @@ test('full solo run: four crystals, reunion, seven beats, then the couple', () =
   assert.equal(game.state, 'running');
   game.spawnDistance = 1e9; // no random hazards on this scripted run
 
-  // Each crystal is walked onto the runner, exactly four of them.
-  for (let index = 0; index < 4; index += 1) {
+  // Each crystal is walked onto the runner, exactly as many as required.
+  for (let index = 0; index < CRYSTAL_COUNT; index += 1) {
     const entry = game.crystals.entries.find((candidate) => !candidate.collected);
     entry.distance = game.distance;
     entry.height = 52;
@@ -98,7 +98,7 @@ test('full solo run: four crystals, reunion, seven beats, then the couple', () =
     assert.equal(game.crystals.collected, index + 1);
   }
   assert.equal(game.crystals.complete, true);
-  assert.ok(notices.some((notice) => /cuatro cristales/i.test(notice)));
+  assert.ok(notices.some((notice) => /cinco cristales/i.test(notice)));
 
   // She waits ahead while the world wakes toward the white city.
   assert.equal(game.girl.active, true);

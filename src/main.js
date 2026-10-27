@@ -1,5 +1,6 @@
 import './style.css';
 import { Game } from './game/Game.js';
+import { KISSES_REQUIRED_FOR_BABY, CRYSTAL_COUNT } from './game/config.js';
 
 const elements = {
   canvas: document.querySelector('#gameCanvas'),
@@ -8,14 +9,19 @@ const elements = {
   crystals: document.querySelector('#crystals'),
   money: document.querySelector('#money'),
   kickCount: document.querySelector('#kickCount'),
+  kisses: document.querySelector('#kisses'),
+  livesChip: document.querySelector('#livesChip'),
+  lives: document.querySelector('#lives'),
   finalDistance: document.querySelector('#finalDistance'),
   startScreen: document.querySelector('#startScreen'),
   pauseScreen: document.querySelector('#pauseScreen'),
   gameOverScreen: document.querySelector('#gameOverScreen'),
+  endingScreen: document.querySelector('#endingScreen'),
   startButton: document.querySelector('#startButton'),
   pauseButton: document.querySelector('#pauseButton'),
   resumeButton: document.querySelector('#resumeButton'),
   restartButton: document.querySelector('#restartButton'),
+  endingRestartButton: document.querySelector('#endingRestartButton'),
   jumpButton: document.querySelector('#jumpButton'),
   kickButton: document.querySelector('#kickButton'),
   musicButton: document.querySelector('#musicButton'),
@@ -40,6 +46,8 @@ function updateScreen(state) {
   elements.startScreen.hidden = state !== 'start';
   elements.pauseScreen.hidden = state !== 'paused';
   elements.gameOverScreen.hidden = state !== 'gameover';
+  // The secret ending replaces the ordinary game-over screen entirely.
+  elements.endingScreen.hidden = state !== 'ending';
   elements.pauseButton.disabled = state !== 'running' && state !== 'paused';
   elements.pauseButton.textContent = state === 'paused' ? 'Reanudar' : 'Pausa';
 
@@ -65,6 +73,8 @@ function updateScreen(state) {
       : 'Juego en marcha.';
   } else if (state === 'reunion') {
     elements.status.textContent = 'Los personajes se encuentran. Pulsa Continuar para avanzar el diálogo.';
+  } else if (state === 'ending') {
+    elements.status.textContent = 'Final secreto: Continuará...';
   }
 }
 
@@ -88,7 +98,7 @@ const game = new Game(elements.canvas, {
     elements.hearts.textContent = `${hearts}`;
   },
   onCrystalsChange: (count) => {
-    elements.crystals.textContent = `${count}/4`;
+    elements.crystals.textContent = `${count}/${CRYSTAL_COUNT}`;
   },
   onMoneyChange: (money) => {
     // The balance turns red once the thief has taken the money.
@@ -97,6 +107,17 @@ const game = new Game(elements.canvas, {
   },
   onKickCountChange: (count) => {
     elements.kickCount.textContent = `${count}`;
+  },
+  onKissCountChange: (count) => {
+    // The counter reads x/KISSES_REQUIRED_FOR_BABY; extra kisses after the
+    // baby stay capped on screen.
+    elements.kisses.textContent = `${Math.min(count, KISSES_REQUIRED_FOR_BABY)}/${KISSES_REQUIRED_FOR_BABY}`;
+  },
+  onLivesChange: (lives) => {
+    // One heart per living family member; the chip only exists while the
+    // couple-stage life system is running (never confused with pickups).
+    elements.lives.textContent = '♥'.repeat(Math.max(0, lives));
+    elements.livesChip.hidden = lives <= 0;
   },
   onNotice: showToast,
 });
@@ -119,17 +140,17 @@ if (params.has('demo')) {
   game.start();
 }
 
-// ?crystals=4 pre-collects crystals so the reunion and the city can be
+// ?crystals=5 pre-collects every crystal so the reunion and the city can be
 // inspected without playing the whole solo section first.
 const preCollect = Number.parseInt(params.get('crystals') ?? '', 10);
 if (Number.isInteger(preCollect) && preCollect > 0) {
   if (game.state === 'start') {
     game.start();
   }
-  const total = Math.min(preCollect, 4);
+  const total = Math.min(preCollect, CRYSTAL_COUNT);
   for (let index = 0; index < total; index += 1) {
     if (game.crystals.collect(game.crystals.entries[index])) {
-      elements.crystals.textContent = `${game.crystals.collected}/4`;
+      elements.crystals.textContent = `${game.crystals.collected}/${CRYSTAL_COUNT}`;
     }
   }
 }
@@ -208,6 +229,9 @@ if (params.has('kick') || params.has('robbery') || params.has('kicks')
 
 elements.startButton.addEventListener('click', () => game.start());
 elements.restartButton.addEventListener('click', () => game.restart());
+// The ending never restarts on its own; only this clearly labelled control
+// starts a genuinely new run.
+elements.endingRestartButton.addEventListener('click', () => game.start());
 elements.pauseButton.addEventListener('click', () => game.togglePause());
 elements.resumeButton.addEventListener('click', () => game.resume());
 
@@ -242,3 +266,8 @@ document.addEventListener('visibilitychange', () => {
     game.pause();
   }
 });
+
+// Inspection handle: lets browser tooling (and curious players in the
+// console) read the live state — the project already ships ?t=, ?kick= and
+// friends for the same purpose. No secrets live here.
+window.loveRunner = game;
