@@ -18,6 +18,7 @@ const elements = {
   restartButton: document.querySelector('#restartButton'),
   jumpButton: document.querySelector('#jumpButton'),
   kickButton: document.querySelector('#kickButton'),
+  musicButton: document.querySelector('#musicButton'),
   status: document.querySelector('#gameStatus'),
   toast: document.querySelector('#toast'),
 };
@@ -40,31 +41,42 @@ function updateScreen(state) {
   elements.pauseScreen.hidden = state !== 'paused';
   elements.gameOverScreen.hidden = state !== 'gameover';
   elements.pauseButton.disabled = state !== 'running' && state !== 'paused';
-  elements.pauseButton.textContent = state === 'paused' ? 'Resume' : 'Pause';
+  elements.pauseButton.textContent = state === 'paused' ? 'Reanudar' : 'Pausa';
 
   // During the reunion the jump button doubles as the dialogue advance.
   const inReunion = state === 'reunion';
   elements.jumpButton.disabled = state !== 'running' && !inReunion;
   elements.jumpButton.innerHTML = inReunion
-    ? 'Continue <span aria-hidden="true">▸</span>'
-    : 'Jump <span aria-hidden="true">↑</span>';
-  elements.jumpButton.setAttribute('aria-label', inReunion ? 'Continue the conversation' : 'Jump');
+    ? 'Continuar <span aria-hidden="true">▸</span>'
+    : 'Saltar <span aria-hidden="true">↑</span>';
+  elements.jumpButton.setAttribute('aria-label', inReunion ? 'Continuar la conversación' : 'Saltar');
 
   // The kick belongs to the solo stage only.
   elements.kickButton.disabled = !(state === 'running' && !game.couple);
 
   if (state === 'gameover') {
     elements.finalDistance.textContent = `${Math.floor(game.distance)} m`;
-    elements.status.textContent = `Run over at ${Math.floor(game.distance)} meters.`;
+    elements.status.textContent = `Fin de la carrera en ${Math.floor(game.distance)} metros.`;
   } else if (state === 'paused') {
-    elements.status.textContent = 'Game paused.';
+    elements.status.textContent = 'Juego en pausa.';
   } else if (state === 'running') {
     elements.status.textContent = game.couple
-      ? 'Game running with both characters.'
-      : 'Game running.';
+      ? 'Juego en marcha con ambos personajes.'
+      : 'Juego en marcha.';
   } else if (state === 'reunion') {
-    elements.status.textContent = 'The two characters meet. Press Continue to advance the dialogue.';
+    elements.status.textContent = 'Los personajes se encuentran. Pulsa Continuar para avanzar el diálogo.';
   }
+}
+
+// The music button mirrors the audio manager's real state: the label shows
+// what the next press does, and the muted style follows the actual preference.
+function updateMusicButton(state) {
+  const muted = !state.enabled;
+  elements.musicButton.textContent = muted ? '♪ Reanudar' : '♪ Pausar';
+  elements.musicButton.setAttribute('aria-label', muted ? 'Reanudar música' : 'Pausar música');
+  elements.musicButton.setAttribute('aria-pressed', String(muted));
+  elements.musicButton.classList.toggle('is-muted', muted);
+  elements.musicButton.classList.toggle('is-playing', state.playing);
 }
 
 const game = new Game(elements.canvas, {
@@ -87,6 +99,15 @@ const game = new Game(elements.canvas, {
     elements.kickCount.textContent = `${count}`;
   },
   onNotice: showToast,
+});
+
+// Music pause/resume: the button asks the audio manager to toggle, and the
+// manager reports every real playback change back so the label never drifts
+// from what is actually audible. It only touches the background songs.
+game.audio.onMusicChange = updateMusicButton;
+updateMusicButton(game.audio.musicState());
+elements.musicButton.addEventListener('click', () => {
+  game.audio.toggleMusic();
 });
 
 // Handy for quick visual checks: ?autostart skips the menu, ?demo also plays.
@@ -207,7 +228,6 @@ function bindActionButton(button, action) {
 
 bindActionButton(elements.jumpButton, () => game.handleJump());
 bindActionButton(elements.kickButton, () => game.handleKick());
-
 // Tapping the screen advances the reunion dialogue on touch devices.
 elements.canvas.addEventListener('pointerdown', () => {
   if (game.state === 'reunion') {

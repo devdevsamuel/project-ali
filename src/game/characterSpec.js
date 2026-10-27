@@ -39,6 +39,8 @@ export const BOY_SPEC = {
   leanBase: 5,
   hairFlutter: 2,
   shoeStyle: 'boot',
+  // How far his head drops to meet hers in the kiss (74 vs 64 tall).
+  kissAlign: 10,
   hair: {
     style: 'wolf',
     // Short nape layers, shortest at the top of the stack.
@@ -119,6 +121,8 @@ export const GIRL_SPEC = {
   lash: true,
   dress: true,
   shoeStyle: 'sneaker',
+  // She is the shorter one: she stays planted and lets him bend down.
+  kissAlign: 0,
   hair: {
     style: 'curls',
     volume: { ox: -10, oy: -1, w: 15, h: 26 },
@@ -415,16 +419,21 @@ function kissPose(spec, pose, input) {
   const t = Math.max(0, Math.min(1, input.kissT ?? 1));
   const settle = Math.sin(input.time * 2.4) * 0.4;
   const hipY = -(spec.shoeH + spec.thigh + spec.shin);
+  // Height match: the taller partner bends while the shorter one stays
+  // planted, so their heads meet on the same line instead of passing over.
+  const align = (spec.kissAlign ?? 0) * t;
   pose.squashY = 1 + 0.015 * t;
-  pose.hip = { x: 2.5 * t, y: hipY - 1.5 * t };
+  pose.hip = { x: 2.5 * t, y: hipY - 1.5 * t + align * 0.6 };
   pose.chest = { x: pose.hip.x + 6 * t, y: pose.hip.y - spec.torso + 0.5 * t };
   pose.head = {
     x: pose.chest.x + 4.5 * t,
-    y: pose.chest.y - 1 - spec.headH / 2 + settle * 0.3,
+    y: pose.chest.y - 1 - spec.headH / 2 + settle * 0.3 + align * 0.4,
     tilt: 2.2 * t,
   };
-  pose.legs.front = legIK(spec, pose.hip, 4 + 4 * t, -spec.shoeH - 2.5 * t, 0.25 + 0.35 * t);
-  pose.legs.back = legIK(spec, pose.hip, -6 - 3 * t, -spec.shoeH, 0.2);
+  // Both feet stay planted: the bend comes from the knees, never from a
+  // floating foot that would read as a positioning error.
+  pose.legs.front = legIK(spec, pose.hip, 4 + 4 * t, -spec.shoeH, 0.25 + 0.35 * t + align * 0.05);
+  pose.legs.back = legIK(spec, pose.hip, -6 - 3 * t, -spec.shoeH, 0.2 + align * 0.04);
   const shoulder = { x: pose.chest.x, y: pose.chest.y + 4 };
   pose.arms.front = armIK(spec, shoulder, shoulder.x + 9 * t + 2, shoulder.y + 6 - 5 * t);
   pose.arms.back = armIK(spec, shoulder, shoulder.x - 6, shoulder.y + spec.armLen - 1);

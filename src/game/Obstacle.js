@@ -54,10 +54,15 @@ export class Obstacle {
   }
 
   // Low street barrier: white plank with terracotta stripes and sturdy legs.
-  drawBarrier(view) {
+  // A dark contour keeps it readable against the white facades behind it, and
+  // the top rail carries a slow travelling glint so the jump line is obvious.
+  drawBarrier(view, time) {
     const { x, y, width, height } = this;
     const top = y + 4;
+    const glint = 0.55 + 0.45 * Math.sin(time * 2.6 + this.phase);
     view.rect(x - 2, this.groundY - 3, width + 4, 4, '#6B4A32', 0.45);
+    // Contour behind the whole silhouette.
+    view.rect(x - 3, top - 4, width + 6, this.groundY - top + 6, '#2A1D14', 0.95);
     view.rect(x + 4, top, 6, this.groundY - top, '#8C7C66');
     view.rect(x + width - 10, top, 6, this.groundY - top, '#7C6D58');
     view.rect(x, top, width, 12, '#F3E9D6');
@@ -68,6 +73,9 @@ export class Obstacle {
     }
     view.rect(x, top - 3, 4, 6, '#E8A03D');
     view.rect(x + width - 4, top - 3, 4, 6, '#E8A03D');
+    // Warm highlight travelling along the top: gentle, never a hard pulse.
+    const glintX = x + mod(time * 46 + this.phase * 20, width + 24) - 12;
+    view.rect(glintX, top - 1, 12, 2, '#FFE08A', 0.75 * glint);
   }
 
   // A toppled flower pot with its bloom spilled across the cobbles.
@@ -76,6 +84,8 @@ export class Obstacle {
     const ground = this.groundY;
     const sway = Math.sin(time * 1.8 + this.phase) * 1;
     view.rect(x - 3, ground - 3, width + 6, 4, '#6B4A32', 0.45);
+    // Contour behind pot and soil together.
+    view.rect(x - 5, ground - 25, width + 14, 24, '#2A1D14', 0.95);
     // The pot lies on its side.
     view.rect(x + 8, ground - 20, 22, 17, '#C4693B');
     view.rect(x + 8, ground - 20, 22, 3, '#E08A52');
@@ -95,9 +105,12 @@ export class Obstacle {
   }
 
   // Broken cobblestones heaped on the road.
-  drawCobble(view) {
+  drawCobble(view, time) {
     const { x, y, width, height } = this;
+    const glint = 0.5 + 0.5 * Math.sin(time * 2.2 + this.phase);
     view.rect(x - 2, this.groundY - 3, width + 4, 4, '#6B4A32', 0.4);
+    // Contour so the heap separates from the pale road behind it.
+    view.rect(x - 4, y - 3, width + 8, height + 6, '#2A1D14', 0.95);
     view.rect(x, y + height * 0.45, width, height * 0.55, '#A8977C');
     view.rect(x + width * 0.12, y, width * 0.76, height * 0.5, '#C6B79E');
     view.rect(x + width * 0.12, y, width * 0.76, 2, '#EFE6D2');
@@ -105,19 +118,25 @@ export class Obstacle {
     view.rect(x + width * 0.2, y + height * 0.5, width * 0.45, 2, '#8C7C66');
     view.rect(x + width * 0.62, y + height * 0.62, 2, height * 0.3, '#8C7C66');
     view.rect(x + 3, y + height * 0.62, 4, 3, '#E8A03D', 0.8);
+    // Warm edge along the top: the height you have to clear.
+    view.rect(x + width * 0.12, y - 1, width * 0.76, 2, '#FFD86E', 0.3 + 0.45 * glint);
   }
 
   // A small gap in the cobbles: dark below, chipped rim above.
-  drawGap(view) {
+  drawGap(view, time) {
     const { x, width } = this;
     const ground = this.groundY;
+    const glint = 0.5 + 0.5 * Math.sin(time * 2.4 + this.phase);
     view.rect(x, ground - 3, width, 4, '#5A4632');
     view.rect(x + 2, ground - 1, width - 4, 26, '#2A1D14');
     view.rect(x + 4, ground + 3, width - 8, 22, '#150D08');
-    view.rect(x, ground - 3, 6, 3, '#8C7C66');
-    view.rect(x + width - 8, ground - 3, 8, 3, '#8C7C66');
-    view.rect(x + 10, ground - 5, 5, 3, '#C6B79E');
+    // Bright chipped stones along the near edge mark the hole clearly.
+    view.rect(x - 2, ground - 5, width + 4, 4, '#2A1D14', 0.95);
+    view.rect(x, ground - 5, 6, 3, '#D8CCB4');
+    view.rect(x + width - 8, ground - 5, 8, 3, '#D8CCB4');
+    view.rect(x + 10, ground - 5, 5, 2, '#C6B79E');
     view.rect(x + width - 18, ground - 4, 4, 2, '#C6B79E');
+    view.rect(x + 6, ground - 5, width - 12, 1, '#FFD86E', 0.3 + 0.5 * glint);
   }
 }
 

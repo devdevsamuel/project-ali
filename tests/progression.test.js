@@ -24,10 +24,11 @@ test('the UI and source have no leftover seven-crystal references', () => {
   assert.match(html, /0\/4/, 'the HUD counter shows four crystals');
 });
 
-test('the four personal messages are exact, well spaced and renderable', () => {
+test('the five personal messages are exact, well spaced and renderable', () => {
   assert.deepEqual(SOLO_MESSAGES.map((message) => message.text), [
     'Te amo, Ali',
     'Lo siento, mi amor',
+    'Vuelve, te necesito',
     'I NEEED U </3',
     'Te extrañamos',
   ]);

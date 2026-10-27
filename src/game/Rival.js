@@ -29,6 +29,14 @@ const VARIANTS = {
 const DASH_EXTRA_SPEED = 66;
 const SNARK_DODGE = 14;
 
+// Dark contour used behind every major block, so each rival keeps a crisp
+// silhouette against the storm AND against the white colonial facades.
+const OUTLINE = '#140E22';
+
+function contour(view, x, y, width, height, alpha = 0.95) {
+  view.rect(x - 2, y - 2, width + 4, height + 4, OUTLINE, alpha);
+}
+
 export class Rival {
   constructor(x, groundY, variant = 'diva') {
     const spec = VARIANTS[variant] ?? VARIANTS.diva;
@@ -117,14 +125,30 @@ export class Rival {
     }
   }
 
-  // Flashy and overconfident: huge teased curls, shades, hand on the hip and
-  // an occasional hair flip. She does not move; she simply refuses to budge.
+  // Flashy and overconfident: huge teased curls, shades, hoop earrings,
+  // hand on the hip and an occasional hair flip and wink. She does not move;
+  // she simply refuses to budge.
   drawDiva(view, cx) {
     const c = this.colors;
     const ground = this.groundY;
     const sway = Math.sin(this.time * 2.3 + this.phase) * 1.6;
     const flip = ((this.time + this.phase) % 3.2) < 0.55;
+    const wink = ((this.time + this.phase) % 4.4) < 0.35;
     const cxTop = cx + sway;
+
+    // Contours first: every major block gets a dark edge so she reads
+    // against both the dark storm and the bright city walls.
+    contour(view, cxTop + 5, ground - 78, 26, 15); // streaming ponytail
+    contour(view, cxTop - 13, ground - 73, 26, 21); // teased hair
+    contour(view, cxTop - 9, ground - 67, 17, 15); // head
+    contour(view, cxTop - 14, ground - 57, 28, 16); // jacket + shoulders
+    contour(view, cxTop - 15, ground - 38, 30, 15); // flared skirt
+    contour(view, cx - 12, ground - 22, 8, 15); // back leg
+    contour(view, cx + 2, ground - 22, 8, 15); // front leg
+    contour(view, cx - 14, ground - 9, 13, 9); // back boot
+    contour(view, cx + 1, ground - 9, 13, 9); // front boot
+    contour(view, cxTop - 15, ground - 67, 8, 17); // raised arm
+    contour(view, cxTop + 7, ground - 52, 9, 13); // arm on the hip
 
     // Ponytail streaming behind her (to the right, away from the runner).
     view.rect(cxTop + 6, ground - 70, 16, 6, c.hairDark);
@@ -132,12 +156,16 @@ export class Rival {
     view.rect(cxTop + 18, ground - 77, 8, 5, c.hair);
     view.rect(cxTop + 16, ground - 76, 6, 2, c.hairShine, 0.8);
 
-    // Legs, boots and a flared skirt.
+    // Legs, heeled boots and a flared skirt.
     view.rect(cx - 11, ground - 20, 7, 12, c.skin);
     view.rect(cx + 3, ground - 20, 7, 12, c.skinShade);
-    view.rect(cx - 13, ground - 8, 11, 8, c.shoe);
-    view.rect(cx + 2, ground - 8, 11, 8, c.shoeDark);
+    view.rect(cx - 13, ground - 8, 11, 7, c.shoe);
+    view.rect(cx + 2, ground - 8, 11, 7, c.shoeDark);
     view.rect(cx - 13, ground - 8, 11, 2, '#FFF5FC', 0.7);
+    view.rect(cx + 2, ground - 8, 11, 2, '#FFF5FC', 0.5);
+    // A stacked heel on each boot: one more confident detail in silhouette.
+    view.rect(cx - 13, ground - 2, 4, 2, c.shoeDark);
+    view.rect(cx + 8, ground - 2, 4, 2, c.shoeDark);
     for (let row = 0; row < 3; row += 1) {
       const t = row / 2;
       const half = 9 + t * 4;
@@ -145,13 +173,19 @@ export class Rival {
       view.rect(cxTop - half, ground - 36 + row * 6, 2, 7, '#FFF5FC', 0.25);
     }
 
-    // Jacket with big shoulder pads and a bare midriff.
+    // Jacket with big shoulder pads, lapels and a bare midriff.
     view.rect(cxTop - 9, ground - 54, 18, 12, c.top);
     view.rect(cxTop - 9, ground - 54, 18, 2, c.topDark);
     view.rect(cxTop + 6, ground - 54, 3, 12, c.topDark);
     view.rect(cxTop - 7, ground - 44, 14, 4, c.skin);
     view.rect(cxTop - 12, ground - 55, 6, 5, c.top);
     view.rect(cxTop + 6, ground - 55, 6, 5, c.top);
+    view.rect(cxTop - 6, ground - 54, 4, 9, c.accent);
+    view.rect(cxTop + 2, ground - 54, 4, 9, c.accent, 0.85);
+    // Belt with a gold buckle at the midriff.
+    view.rect(cxTop - 8, ground - 45, 16, 2, '#1B1230');
+    view.rect(cxTop - 1, ground - 45, 4, 2, '#F2C14E');
+    view.rect(cxTop - 1, ground - 45, 2, 1, '#FFF5FC', 0.8);
 
     // Hands: one on the hip, the other flipping her hair when the mood hits.
     view.rect(cxTop + 8, ground - 46, 5, 5, c.skinShade);
@@ -171,12 +205,25 @@ export class Rival {
     view.rect(cxTop - 12, ground - 64, 5, 8, c.hairDark);
     view.rect(cxTop + 4, ground - 64, 5, 8, c.hair);
     view.rect(cxTop - 9, ground - 71, 6, 3, c.hairShine, 0.85);
+    // A gold streak in the curls: style, and extra contrast in the silhouette.
+    view.rect(cxTop + 1, ground - 70, 4, 3, '#F2C14E', 0.9);
+    // Hoop earring.
+    view.rect(cxTop - 9, ground - 55, 2, 4, '#F2C14E');
+    view.rect(cxTop - 9, ground - 52, 2, 2, '#FFF5FC', 0.7);
+    // Star shades with a glint — or a cheeky wink under them.
     view.rect(cxTop - 10, ground - 61, 11, 4, '#1B1230');
-    view.rect(cxTop - 9, ground - 60, 3, 2, '#FFFFFF', 0.9);
-    view.rect(cxTop - 6, ground - 55, 4, 2, '#B6264E');
+    if (wink) {
+      view.rect(cxTop - 8, ground - 60, 7, 1, '#FFFFFF', 0.9);
+    } else {
+      view.rect(cxTop - 9, ground - 60, 3, 2, '#FFFFFF', 0.9);
+    }
+    // Confident smirk.
+    view.rect(cxTop - 6, ground - 55, 5, 2, '#B6264E');
+    view.rect(cxTop - 4, ground - 56, 3, 1, '#B6264E');
   }
 
-  // Sarcastic: bob haircut, round glasses, arms crossed, always sidestepping.
+  // Sarcastic: bob haircut, round glasses, a trailing scarf, arms crossed,
+  // always sidestepping with a smug raised eyebrow.
   drawSnark(view, cx) {
     const c = this.colors;
     const ground = this.groundY;
@@ -184,12 +231,25 @@ export class Rival {
     const cxTop = cx + lean;
     const bob = Math.abs(Math.sin(this.time * 3.1 + this.phase)) * 2;
 
-    // Sneakers and legs.
+    // Contours first, so she reads on any background.
+    contour(view, cx - 10, ground - 19 - bob * 0.4, 8, 13); // legs
+    contour(view, cx - 12, ground - 7, 12, 8); // back shoe
+    contour(view, cx, ground - 7, 12, 8); // front shoe
+    contour(view, cx - 9, ground - 29, 18, 12); // shorts
+    contour(view, cxTop - 10, ground - 46 - bob * 0.5, 20, 21); // jacket
+    contour(view, cxTop - 11, ground - 41 - bob * 0.5, 22, 12); // crossed arms
+    contour(view, cxTop - 8, ground - 57 - bob * 0.6, 16, 15); // head
+    contour(view, cxTop - 10, ground - 61 - bob * 0.6, 20, 10); // bob hair
+
+    // Sneakers and legs, with a racing stripe across each shoe.
     view.rect(cx - 9, ground - 18 - bob * 0.4, 6, 10, c.skin);
     view.rect(cx + 2, ground - 18 - bob * 0.4, 6, 10, c.skinShade);
     view.rect(cx - 11, ground - 6, 10, 6, c.shoe);
     view.rect(cx + 1, ground - 6, 10, 6, c.shoeDark);
     view.rect(cx - 11, ground - 6, 10, 2, '#FFF5FC', 0.6);
+    view.rect(cx + 1, ground - 6, 10, 2, '#FFF5FC', 0.45);
+    view.rect(cx - 9, ground - 3, 6, 1, c.accent, 0.9);
+    view.rect(cx + 3, ground - 3, 6, 1, c.accent, 0.75);
 
     // Shorts and a slouchy jacket.
     view.rect(cx - 8, ground - 28, 16, 10, '#3A2A66');
@@ -198,7 +258,10 @@ export class Rival {
     view.rect(cxTop - 9, ground - 44 - bob * 0.5, 18, 3, c.topDark);
     view.rect(cxTop - 9, ground - 32 - bob * 0.5, 18, 3, c.accent);
 
-    // Crossed arms: two slabs over the chest.
+    // Crossed arms: two slabs over the chest, with a scarf tail behind.
+    view.rect(cxTop + 5, ground - 47 - bob * 0.5, 12, 4, c.accent);
+    view.rect(cxTop + 13, ground - 45 - bob * 0.5, 5, 9, c.accent);
+    view.rect(cxTop + 13, ground - 37 - bob * 0.5, 4, 5, c.accent, 0.75);
     view.rect(cxTop - 10, ground - 39 - bob * 0.5, 20, 5, c.skin);
     view.rect(cxTop - 10, ground - 34 - bob * 0.5, 20, 5, c.skinShade);
     view.rect(cxTop - 12, ground - 40 - bob * 0.5, 4, 8, c.topDark);
@@ -210,14 +273,21 @@ export class Rival {
     view.rect(cxTop - 9, ground - 53 - bob * 0.6, 4, 8, c.hairDark);
     view.rect(cxTop + 5, ground - 53 - bob * 0.6, 4, 8, c.hairDark);
     view.rect(cxTop - 8, ground - 59 - bob * 0.6, 7, 2, c.hairShine, 0.8);
+    // One eyebrow raised higher than the other: pure attitude.
+    view.rect(cxTop - 8, ground - 54 - bob * 0.6, 5, 1, '#1C3B47');
+    view.rect(cxTop - 1, ground - 53 - bob * 0.6, 5, 1, '#1C3B47');
     view.rect(cxTop - 8, ground - 52 - bob * 0.6, 6, 5, '#1B1230', 0.85);
     view.rect(cxTop - 1, ground - 52 - bob * 0.6, 6, 5, '#1B1230', 0.85);
-    view.rect(cxTop - 6, ground - 47 - bob * 0.6, 3, 2, c.skin);
-    view.rect(cxTop - 6, ground - 49 - bob * 0.6, 6, 2, c.skinShade, 0.6);
+    view.rect(cxTop - 7, ground - 51 - bob * 0.6, 2, 2, '#FFFFFF', 0.85);
+    view.rect(cxTop, ground - 51 - bob * 0.6, 2, 2, '#FFFFFF', 0.85);
+    // Stud earring and a lopsided smirk.
+    view.rect(cxTop - 8, ground - 47 - bob * 0.6, 2, 2, '#F2C14E');
     view.rect(cxTop - 5, ground - 48 - bob * 0.6, 6, 3, '#5A1B45');
+    view.rect(cxTop - 3, ground - 49 - bob * 0.6, 4, 1, '#5A1B45');
   }
 
-  // Fast and determined: leaning sprint, streaming ponytail, pumping arms.
+  // Fast and determined: leaning sprint, streaming ponytail, pumping arms,
+  // wristbands and a competitive grin.
   drawDashRival(view, cx) {
     const c = this.colors;
     const ground = this.groundY;
@@ -225,14 +295,30 @@ export class Rival {
     const lean = 5;
     const cxTop = cx - 2;
 
+    // Contours first: limbs get a dark pass behind them so they never melt
+    // into a bright wall or a dark storm.
+    contour(view, cx - 17, ground - 24, 34, 22); // legs + shoes
+    contour(view, cxTop - 10, ground - 48 - 0, 20, 22); // torso
+    contour(view, cxTop - 15, ground - 47, 30, 13); // arms
+    contour(view, cxTop - 11 - lean, ground - 61, 20, 16); // head
+    contour(view, cxTop - 12 - lean, ground - 67, 30, 10); // hair + band
+
     // Pumping legs.
     const frontLeg = Math.sin(phase) * 8;
+    view.line(cx - 4, ground - 22, cx - 10 + frontLeg, ground - 12, 8, OUTLINE);
     view.line(cx - 4, ground - 22, cx - 10 + frontLeg, ground - 12, 6, c.skin);
+    view.line(cx - 10 + frontLeg, ground - 12, cx - 12 + frontLeg * 1.4, ground - 4, 7, OUTLINE);
     view.line(cx - 10 + frontLeg, ground - 12, cx - 12 + frontLeg * 1.4, ground - 4, 5, c.skinShade);
+    view.rect(cx - 17 + frontLeg * 1.4, ground - 6, 13, 7, OUTLINE);
     view.rect(cx - 16 + frontLeg * 1.4, ground - 5, 11, 5, c.shoe);
+    view.rect(cx - 15 + frontLeg * 1.4, ground - 3, 9, 1, c.accent, 0.9);
+    view.line(cx + 3, ground - 22, cx + 8 - frontLeg, ground - 12, 8, OUTLINE);
     view.line(cx + 3, ground - 22, cx + 8 - frontLeg, ground - 12, 6, c.skinShade);
+    view.line(cx + 8 - frontLeg, ground - 12, cx + 10 - frontLeg * 1.4, ground - 4, 7, OUTLINE);
     view.line(cx + 8 - frontLeg, ground - 12, cx + 10 - frontLeg * 1.4, ground - 4, 5, c.skin);
+    view.rect(cx + 3 - frontLeg * 1.4, ground - 6, 13, 7, OUTLINE);
     view.rect(cx + 4 - frontLeg * 1.4, ground - 5, 11, 5, c.shoeDark);
+    view.rect(cx + 5 - frontLeg * 1.4, ground - 3, 9, 1, c.accent, 0.75);
 
     // Shorts and tank top, tilted forward.
     view.rect(cxTop - 7, ground - 30, 15, 9, '#2A1F4A');
@@ -240,16 +326,30 @@ export class Rival {
       view.rect(cxTop - 7 - lean + row, ground - 46 + row * 5, 14, 6, row % 2 === 0 ? c.top : c.topDark);
     }
     view.rect(cxTop - 9 - lean, ground - 47, 17, 3, c.accent);
+    // A little lightning patch on the tank: her team colours, and a bright
+    // detail that survives at running speed.
+    view.rect(cxTop + 1 - lean, ground - 43, 3, 4, '#FFF5FC', 0.95);
+    view.rect(cxTop - 1 - lean, ground - 40, 5, 3, '#FFF5FC', 0.95);
+    view.rect(cxTop - 3 - lean, ground - 37, 5, 3, c.accent, 0.95);
 
-    // Pumping arms.
+    // Pumping arms with wristbands at the ends.
     const armSwing = Math.sin(phase + Math.PI) * 7;
+    view.line(cxTop - 6, ground - 44, cxTop - 12 + armSwing, ground - 36, 6, OUTLINE);
     view.line(cxTop - 6, ground - 44, cxTop - 12 + armSwing, ground - 36, 4, c.skin);
+    view.rect(cxTop - 13 + armSwing, ground - 38, 5, 3, c.accent);
+    view.line(cxTop + 5, ground - 44, cxTop + 10 - armSwing, ground - 37, 6, OUTLINE);
     view.line(cxTop + 5, ground - 44, cxTop + 10 - armSwing, ground - 37, 4, c.skinShade);
+    view.rect(cxTop + 9 - armSwing, ground - 39, 5, 3, c.accent, 0.85);
 
-    // Head with a headband, ponytail flying back, determined glare.
+    // Head with a headband (tails streaming), ponytail flying back, and a
+    // determined glare over a competitive grin.
     view.rect(cxTop - 8 - lean, ground - 58, 14, 12, c.skin);
+    view.rect(cxTop - 14 - lean, ground - 63, 7, 3, c.accent);
+    view.rect(cxTop - 17 - lean, ground - 61, 6, 3, c.accent, 0.85);
     view.rect(cxTop - 6 - lean, ground - 54, 3, 3, '#1B1230');
-    view.rect(cxTop - 2 - lean, ground - 52, 5, 2, '#5A1B45');
+    view.rect(cxTop - 2 - lean, ground - 53, 3, 2, '#1B1230');
+    view.rect(cxTop - 3 - lean, ground - 50, 6, 2, '#5A1B45');
+    view.rect(cxTop - 1 - lean, ground - 51, 4, 1, '#FFF5FC', 0.85);
     view.rect(cxTop - 9 - lean, ground - 60, 16, 5, c.accent);
     view.rect(cxTop - 10 - lean, ground - 65, 17, 6, c.hair);
     view.rect(cxTop + 4, ground - 64, 16, 5, c.hair);

@@ -6,6 +6,8 @@ import {
 } from './config.js';
 import { stepVertical, LAND_DURATION } from './physics.js';
 
+const lerp = (a, b, t) => a + (b - a) * t;
+
 export class Player {
   constructor(x, groundY) {
     this.x = x;
@@ -38,6 +40,8 @@ export class Player {
     this.glance = 0;
     this.faceOverride = null;
     this.speaking = false;
+    // Set during the reunion for a softer cinematic blend.
+    this.poseBlendRate = null;
     // The kick is ready the moment the run starts.
     this.kickTime = KICK_COOLDOWN_END;
     this.kickConnected = false;
@@ -73,6 +77,9 @@ export class Player {
     this.kickTime = 0;
     this.kickConnected = false;
     this.kickPhaseWasActive = false;
+    // The landing already played; a stale timer must not replay it when the
+    // kick ends.
+    this.landTimer = 0;
     // Remember the air state so the recovery returns to the right animation.
     this.kickFromAir = !this.grounded;
     this.setState('kick');
@@ -80,9 +87,9 @@ export class Player {
   }
 
   // The active hitbox, in front of the runner at leg height; null outside the
-  // active frames. The box hangs from the runner's own position, so a kick
-  // thrown in mid-air connects at the same height as one thrown from the
-  // ground.
+  // active frames. The box grows with the leg's extension — using the same
+  // ease-out as the pose — so a rival is hit on the frame the foot actually
+  // reaches him instead of a fixed window that fires early.
   getKickBounds() {
     if (this.state !== 'kick') {
       return null;
@@ -90,10 +97,17 @@ export class Player {
     if (this.kickTime < KICK_ACTIVE_START || this.kickTime > KICK_ACTIVE_END) {
       return null;
     }
+    const progress = Math.max(0, Math.min(1,
+      (this.kickTime - KICK_ACTIVE_START) / (KICK_ACTIVE_END - KICK_ACTIVE_START)));
+    const eased = 1 - (1 - progress) ** 3;
+    const footX = lerp(8, KICK_REACH, eased);
+    const centerX = this.x + this.width / 2;
+    const left = this.x + this.width - 12;
+    const right = centerX + footX + 10;
     return {
-      x: this.x + this.width - 8,
+      x: left,
       y: this.y + this.height - KICK_HITBOX.up,
-      width: KICK_HITBOX.forward,
+      width: Math.max(8, Math.min(KICK_HITBOX.forward, right - left)),
       height: KICK_HITBOX.height,
     };
   }
@@ -171,10 +185,13 @@ export class Player {
       if (this.state === 'kick' && this.kickTime >= KICK_END) {
         // The kick is over: the vertical physics owns the state again.
         this.stateLock = false;
-        // A kick thrown in mid-air hands control back to the jump; a grounded
-        // kick returns to the run.
+        // A kick thrown in mid-air hands control back to the jump; a kick
+        // that ended with him on the ground returns to the run, or to the
+        // landing if he touched down during the recovery.
         if (this.kickFromAir && !this.grounded) {
           this.setState(this.verticalVelocity < 0 ? 'rise' : 'fall');
+        } else if (this.landTimer > 0) {
+          this.setState('land');
         } else {
           this.setState(this.together ? 'together' : 'run');
         }
@@ -231,7 +248,10 @@ export class Player {
       speaking: this.speaking,
       kickT: this.kickTime,
     });
-    this.pose = blendPose(this.pose, target, 1 - Math.exp(-deltaTime * 26));
+    // The reunion slows the blend so kneeling, standing and leaning read as
+    // one continuous motion instead of three pops.
+    const rate = this.poseBlendRate ?? 26;
+    this.pose = blendPose(this.pose, target, 1 - Math.exp(-deltaTime * rate));
   }
 
   getBounds() {

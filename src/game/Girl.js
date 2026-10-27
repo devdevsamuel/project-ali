@@ -46,6 +46,8 @@ export class Girl {
     // She never performs a kick, so the vertical physics always owns her
     // state; the flag keeps the shared code path honest.
     this.stateLock = false;
+    // Set during the reunion for a softer cinematic blend.
+    this.poseBlendRate = null;
   }
 
   // All crystals collected: she takes her place further down the path.
@@ -191,7 +193,8 @@ export class Girl {
       faceOverride: this.faceOverride,
       speaking: this.speaking,
     });
-    this.pose = blendPose(this.pose, target, 1 - Math.exp(-deltaTime * 24));
+    const rate = this.poseBlendRate ?? 24;
+    this.pose = blendPose(this.pose, target, 1 - Math.exp(-deltaTime * rate));
   }
 
   drawShadow(view) {

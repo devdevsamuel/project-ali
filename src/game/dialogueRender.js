@@ -15,7 +15,7 @@ const TEXT_X = BOX_X + 26;
 const TEXT_Y = BOX_Y + 26;
 const CHARS_PER_SECOND = 44;
 
-export function drawDialogueBox(view, beat, beatTime, hold) {
+export function drawDialogueBox(view, beat, beatTime, hold, canAdvance = true) {
   // Shadow, white border, violet border, dark fill.
   view.rect(BOX_X, BOX_Y, BOX_WIDTH, BOX_HEIGHT, '#0B0618', 0.55);
   view.rect(BOX_X + 3, BOX_Y + 3, BOX_WIDTH - 6, BOX_HEIGHT - 6, '#FFF5FC');
@@ -48,8 +48,10 @@ export function drawDialogueBox(view, beat, beatTime, hold) {
   });
 
   const textDone = revealed >= total;
-  const canAdvance = beatTime >= hold;
-  if (textDone && canAdvance && Math.sin(beatTime * 6) > -0.4) {
+  const mayAdvance = beatTime >= hold && canAdvance;
+  // The advance mark only shows when advancing actually does something: while
+  // the current recording is still finishing, the box waits quietly.
+  if (textDone && mayAdvance && Math.sin(beatTime * 6) > -0.4) {
     drawAdvanceMark(view);
   }
 }

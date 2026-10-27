@@ -27,10 +27,10 @@ export class SignField {
   }
 
   draw(view, distance, time) {
-    // The Popayán sign is drawn first so it sits behind the other signs.
+    // The Popayán landmark sign is drawn first so it sits behind the others.
     const popayanX = this.screenX(this.popayan, distance);
-    if (popayanX > -320 && popayanX < GAME_WIDTH + 40) {
-      drawBoard(view, this.popayan, popayanX);
+    if (popayanX > -360 && popayanX < GAME_WIDTH + 360) {
+      drawPopayanSign(view, this.popayan, popayanX, time);
     }
 
     for (const entry of this.entries) {
@@ -64,6 +64,41 @@ function textWidth(entry) {
   return measureText(entry.text, TEXT_UNIT);
 }
 
+// The road opens with a big white landmark in the spirit of the Hollywood
+// sign: large uppercase letters standing on the hillside, lattice struts
+// behind them, and a chunky arrow pointing the way the runner is travelling.
+// It stays well above the road, so nothing about gameplay is obscured.
+function drawPopayanSign(view, entry, x, time) {
+  const unit = 6;
+  const width = measureText(entry.text, unit);
+  const height = 9 * unit;
+  const left = x - width / 2;
+  const baseY = GROUND_Y - 96;
+  const top = baseY - height;
+
+  // Lattice struts holding the letters up on the slope.
+  for (let strut = 10; strut < width - 12; strut += 46) {
+    view.rect(left + strut, baseY, 3, 15, '#6A6F7E');
+    view.rect(left + strut + 9, baseY, 3, 15, '#565B6B', 0.85);
+    view.rect(left + strut, baseY + 7, 12, 2, '#6A6F7E', 0.7);
+    // A little scrub at the foot of each strut roots it in the hillside.
+    view.rect(left + strut - 4, baseY + 13, 11, 4, '#3E7A3E', 0.9);
+  }
+
+  // Drop shadow first, then the letters, so white stays readable against the
+  // storm sky and the bright day sky alike.
+  drawText(view, entry.text, x + 4, top + 4, { unit, color: '#1E2433', align: 'center' });
+  drawText(view, entry.text, x, top, { unit, color: '#FFFFFF', align: 'center' });
+
+  // Arrow pointing down the road: the runner travels to the right, so the
+  // sign points right. It bobs gently to catch the eye without pulsing hard.
+  const arrowX = left + width + 26;
+  const arrowY = top + height / 2;
+  const bob = Math.sin(time * 2.2) * 3;
+  drawArrow(view, arrowX + bob, arrowY, '#1E2433', 36);
+  drawArrow(view, arrowX + bob, arrowY, '#FFFFFF', 30);
+}
+
 // A wooden board on a stake, planted beside the road. When the entry carries
 // an arrow, a chunky pixel arrow is painted on the board pointing the way.
 function drawBoard(view, entry, x) {
@@ -94,14 +129,16 @@ function drawBoard(view, entry, x) {
 // Width of the painted arrow on a sign, in game units.
 const ARROW_WIDTH = 20;
 
-// A chunky right-pointing arrow drawn from small squares.
-function drawArrow(view, x, y, color) {
+// A chunky right-pointing arrow drawn from small squares. `size` scales the
+// whole shape so the landmark sign can use a much larger version.
+function drawArrow(view, x, y, color, size = 20) {
+  const s = size / 20;
   // The shaft.
-  view.rect(x - 9, y - 2, 9, 4, color);
+  view.rect(x - 9 * s, y - 2 * s, 9 * s, 4 * s, color);
   // The head: a stack of shrinking squares pointing right.
   for (let step = 0; step < 4; step += 1) {
-    const size = 9 - step * 2;
-    view.rect(x - 4 + step * 2, y - size / 2, size, size, color);
+    const box = (9 - step * 2) * s;
+    view.rect(x - 4 * s + step * 2 * s, y - box / 2, box, box, color);
   }
 }
 

@@ -119,6 +119,28 @@ canvas {
   gap: 0.5rem;
 }
 
+.hud-actions {
+  display: flex;
+  gap: 0.5rem;
+  pointer-events: auto;
+}
+
+/* Music toggle: the note dims while muted and glows while a song plays. */
+.music-button {
+  min-width: 6.6rem;
+}
+
+.music-button.is-muted {
+  opacity: 0.62;
+  filter: saturate(0.45);
+}
+
+.music-button.is-playing {
+  box-shadow:
+    0 0 0 1px #ff8fdd,
+    0 0 14px rgb(255 105 212 / 35%);
+}
+
 .hud > span,
 .hud-stats > span {
   padding: 0.4rem 0.65rem;
@@ -296,6 +318,16 @@ kbd {
   .hud-stats > span {
     padding: 0.25rem 0.45rem;
     font-size: 0.8rem;
+  }
+
+  .hud-actions {
+    gap: 0.35rem;
+  }
+
+  .music-button {
+    min-width: 0;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.78rem;
   }
 
   .toast {

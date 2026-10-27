@@ -23,7 +23,8 @@ export const HEART_MIN_DISTANCE = 8;
 export const SOLO_MESSAGES = [
   { text: 'Te amo, Ali', kind: 'board', distance: 13 },
   { text: 'Lo siento, mi amor', kind: 'note', distance: 47 },
-  { text: 'I NEEED U </3', kind: 'neon', distance: 86 },
+  { text: 'Vuelve, te necesito', kind: 'graffiti', distance: 72 },
+  { text: 'I NEEED U </3', kind: 'neon', distance: 92 },
   // The floating thought carries two little pixel dogs beside the words.
   { text: 'Te extrañamos', kind: 'float', distance: 126, dogs: 2 },
 ];
@@ -110,9 +111,13 @@ export const REUNION_CROP_HEIGHT = 135;
 export const REUNION_CROP_Y = 135;
 // How far ahead of the player she stands once all crystals are collected.
 export const GIRL_WAIT_AHEAD = 700;
-// Centre-to-center distance between the two when the kiss poses take over;
-// both lean in about ten units from here.
-export const KISS_GAP = 42;
+// Centre-to-center distance between the two when the kiss poses take over.
+// Sized so their head boxes just touch and the puckered lips meet: the pose
+// pushes each face ~21 units forward from its own centre, so 34 puts the
+// mouths on the same pixel without the heads interpenetrating.
+export const KISS_GAP = 34;
+// How far she steps toward him as the outro begins.
+export const GIRL_KISS_STEP = 22;
 // Minimum seconds a dialogue beat must stay on screen before it can advance.
 export const BEAT_HOLD = 0.45;
 // Ali's deliberate silence before she answers (beat 5).
@@ -123,3 +128,34 @@ export const AWAKEN_SECONDS = 6;
 
 // Distance over which the background lighting/color gradually evolves.
 export const PROGRESS_DISTANCE = 500;
+
+// Audio assets (hosted files provided for the project). Kept here so the
+// URLs stay configurable and out of the gameplay code.
+export const AUDIO_ASSETS = {
+  kick: 'https://firebasestorage.googleapis.com/v0/b/portfolio-bedf9.firebasestorage.app/o/project-ali%2Fmuerebich.ogg?alt=media&token=420b1d26-6287-4531-8fa1-2d7fd2c5a9b2',
+  samuel: 'https://firebasestorage.googleapis.com/v0/b/portfolio-bedf9.firebasestorage.app/o/project-ali%2Faudio-samuel.ogg?alt=media&token=90de5b79-0c45-452f-bc93-e8fe95dd22bf',
+  ali: 'https://firebasestorage.googleapis.com/v0/b/portfolio-bedf9.firebasestorage.app/o/project-ali%2Faudio-ali.ogg?alt=media&token=c4ea0e8b-1c68-4a4d-b3c6-9b60f359309c',
+  solo: 'https://firebasestorage.googleapis.com/v0/b/portfolio-bedf9.firebasestorage.app/o/project-ali%2FSin%20Ti.mp3?alt=media&token=1962d3c1-0855-4f6c-b280-f8f014172ca9',
+  couple: 'https://firebasestorage.googleapis.com/v0/b/portfolio-bedf9.firebasestorage.app/o/project-ali%2FContigo.mp3?alt=media&token=11278bd2-78d9-4479-a400-0e44f5427b5e',
+};
+
+// Per-track volume: songs sit under the action, speech stays fully audible.
+export const AUDIO_VOLUMES = {
+  kick: 0.9,
+  samuel: 1,
+  ali: 1,
+  solo: 0.4,
+  couple: 0.45,
+};
+
+// Target duration for each dialogue recording, in seconds. The manager reads
+// the real length from the file and sets playbackRate so each turn lasts
+// about this long. Rates are clamped so speech is never sped up — slowing a
+// line slightly keeps the principal character easy to follow — and both
+// recordings always play to the end.
+export const VOICE_TARGET_SECONDS = {
+  samuel: 6,
+  ali: 7.5,
+};
+export const VOICE_RATE_MIN = 0.85;
+export const VOICE_RATE_MAX = 1;

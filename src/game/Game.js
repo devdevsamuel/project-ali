@@ -13,6 +13,7 @@ import { Effects, drawHeart } from './Effects.js';
 import { CrystalField } from './Crystal.js';
 import { PixelView } from './render.js';
 import { NEON } from './palette.js';
+import { AudioManager } from './Audio.js';
 import {
   ART, GAME_WIDTH, GAME_HEIGHT, GROUND_Y, PIXELS_PER_METER, PLAYER_X,
   HEART_MIN_DISTANCE, PROGRESS_DISTANCE, CRYSTAL_COUNT,
@@ -20,9 +21,9 @@ import {
   OUTRO_STEP_END, OUTRO_KISS_END, OUTRO_PART_END,
   OUTRO_PULLBACK_START, OUTRO_PULLBACK,
   REUNION_CROP_WIDTH, REUNION_CROP_HEIGHT, REUNION_CROP_Y,
-  KISS_GAP, GIRL_WAIT_AHEAD, AWAKEN_SECONDS,
-  KICK_QUIPS, KICK_ACTIVE_START, KICK_ACTIVE_END, KICK_HITSTOP, KICK_SHAKE,
-  KICK_SHAKE_DECAY, KICK_SUCCESS_TARGET,
+  KISS_GAP, GIRL_KISS_STEP, GIRL_WAIT_AHEAD, AWAKEN_SECONDS,
+  KICK_QUIPS, KICK_ACTIVE_START, KICK_ACTIVE_END, KICK_COOLDOWN_END,
+  KICK_HITSTOP, KICK_SHAKE, KICK_SHAKE_DECAY, KICK_SUCCESS_TARGET,
   ROBBER_FIRST_DELAY,
   STARTING_MONEY, ROBBED_MONEY,
   RAIN_INTENSITY_PER_CRYSTAL, RAIN_MAX_INTENSITY,
@@ -36,7 +37,14 @@ const clamp01 = (value) => Math.max(0, Math.min(1, value));
 // Mirrors the typewriter speed in dialogueRender.js so the game knows when a
 // line is fully revealed and may be advanced.
 const DIALOGUE_CHARS_PER_SECOND = 44;
-const DIALOGUE_IDLE_ADVANCE = 2.4;
+// Idle time after a line is fully revealed before it advances on its own.
+// Tuned so one speaker's beats span roughly their recording's length, keeping
+// subtitles, animation and audio in step.
+const DIALOGUE_IDLE_ADVANCE = 1.2;
+// Safety net: if a recording never reports the end (failed load, stalled
+// decoder), the scene stops waiting after this many seconds instead of
+// hanging on the conversation forever.
+const VOICE_WAIT_SAFETY = 14;
 const RIVAL_VARIANTS = ['diva', 'snark', 'dash'];
 
 function rectanglesOverlap(first, second) {
@@ -82,6 +90,8 @@ export class Game {
     this.signs = new SignField();
     this.comments = new CommentField();
     this.girl = new Girl(GROUND_Y);
+    // Centralised audio: sound effects, dialogue voice and the two songs.
+    this.audio = new AudioManager();
 
     this.input = new Input({
       onJump: () => this.handleJump(),
@@ -145,8 +155,12 @@ export class Game {
 
   start() {
     this.reset();
+    // A fresh run starts from silence: nothing from the previous attempt
+    // keeps playing, then the solo journey theme begins once.
+    this.audio.reset();
     this.player.setState('run');
     this.setState('running');
+    this.audio.playMusic('solo');
   }
 
   restart() {
@@ -339,10 +353,24 @@ export class Game {
   }
 
   runAutopilot() {
-    if (!this.autopilot || !this.player.grounded) {
+    if (!this.autopilot) {
       return;
     }
-    // Dev-only attract mode (?demo): hop the next hazard, then the high gems.
+    // Dev-only attract mode (?demo): while airborne over a rival, throw a
+    // kick for flair — the jump has already guaranteed clearance, and the
+    // knock reads nicely in recordings.
+    if (!this.player.grounded && this.player.kickTime >= KICK_COOLDOWN_END) {
+      const rival = this.hazards.find((hazard) => hazard.kickable && !hazard.knocked
+        && hazard.x > this.player.x - 10 && hazard.x - this.player.x < 80);
+      if (rival) {
+        this.handleKick();
+        return;
+      }
+    }
+    if (!this.player.grounded) {
+      return;
+    }
+    // Hop the next hazard, then the high gems.
     const next = this.hazards.find((hazard) => hazard.x + hazard.width > this.player.x);
     if (next && next.x - this.player.x < 150) {
       this.handleJump();
@@ -466,6 +494,9 @@ export class Game {
           const impactX = bounds.x + bounds.width / 2;
           const impactY = bounds.y + bounds.height / 2;
           this.effects.kickImpactBig(impactX, impactY);
+          // The kick sound fires here, on the impact itself — never on the
+          // key press, never on a whiff, and once per landed hit.
+          this.audio.kick();
           // A brief freeze and a screen shake make the hit land.
           this.hitStop = KICK_HITSTOP;
           this.shake = KICK_SHAKE;
@@ -665,21 +696,36 @@ export class Game {
     this.girl.beginReunion();
     this.player.setState('surprise');
     this.girl.setState('greet');
+    // The solo theme stops here and stays off through the conversation and
+    // the kiss, so the voice recordings play alone.
+    this.audio.pauseMusic();
+    // Final kiss positions: she steps toward him, he closes the rest, and the
+    // two centres end exactly KISS_GAP apart so their faces connect.
+    const girlKissX = girlX + GIRL_KISS_STEP;
     this.reunion = {
       phase: 'approach',
       t: 0,
       zoom: 0,
       startX: this.player.x,
       kneelX: this.player.x + REUNION_STEP,
-      kissX: girlX - KISS_GAP - 2,
       girlStartX: girlX,
+      girlKissX,
+      kissX: girlKissX - KISS_GAP - 2,
       beatIndex: -1,
       beatTime: 0,
+      // Each speaker's recording plays once per turn; the scene holds the
+      // next speaker (or the outro) until it has finished.
+      voiceStarted: {},
+      voiceWait: 0,
+      voiceBlocked: false,
       kissFired: false,
       cheerFired: false,
       outroT: 0,
     };
     this.setState('reunion');
+    // Softer blend while the cinematic plays out.
+    this.player.poseBlendRate = 12;
+    this.girl.poseBlendRate = 12;
     this.announce('Ellos se encuentran.');
   }
 
@@ -707,11 +753,24 @@ export class Game {
       if (beat) {
         const revealed = Math.floor(Math.max(0, scene.beatTime - 0.12) * DIALOGUE_CHARS_PER_SECOND);
         const textDone = revealed >= Array.from(beat.line).length;
+        // Hold the next speaker (or the end of the conversation) until the
+        // current recording has actually finished, so nothing is cut off.
+        let blocked = this.voiceBlocksAdvance(scene);
+        if (blocked) {
+          scene.voiceWait += deltaTime;
+          if (scene.voiceWait > VOICE_WAIT_SAFETY) {
+            this.audio.stopVoice();
+            blocked = false;
+          }
+        } else {
+          scene.voiceWait = 0;
+        }
+        scene.voiceBlocked = blocked;
         if (beat.auto) {
-          if (scene.beatTime >= beat.hold) {
+          if (scene.beatTime >= beat.hold && !blocked) {
             this.nextBeat();
           }
-        } else if (textDone && scene.beatTime >= beat.hold + DIALOGUE_IDLE_ADVANCE) {
+        } else if (textDone && scene.beatTime >= beat.hold + DIALOGUE_IDLE_ADVANCE && !blocked) {
           // No input: keep the scene moving on its own.
           this.nextBeat();
         }
@@ -719,18 +778,28 @@ export class Game {
       return;
     }
 
-    // Outro: step, kiss, part — with the camera pulling back near the end.
+    // Outro: stand, step, kiss, part — with the camera pulling back at the
+    // end. Positions are eased the whole way so nothing teleports.
     scene.outroT += deltaTime;
     const t = scene.outroT;
-    this.player.kissT = t < OUTRO_STEP_END ? clamp01(t / OUTRO_STEP_END) : 1;
-    this.girl.kissT = this.player.kissT;
+    // First he rises from the kneel, then the lean begins: a short stand
+    // beat keeps the transition from popping straight into the kiss.
+    const standEnd = 0.16;
+    const kissT = clamp01((t - standEnd) / Math.max(0.001, OUTRO_STEP_END - standEnd));
+    this.player.kissT = kissT;
+    this.girl.kissT = kissT;
 
     if (t < OUTRO_KISS_END) {
       const stepT = easeInOut(clamp01(t / OUTRO_STEP_END));
       this.player.x = lerp(scene.kneelX, scene.kissX, stepT);
-      this.girl.x = lerp(scene.girlStartX, scene.girlStartX + 22, stepT);
-      this.player.setState('kiss');
-      this.girl.setState('kiss');
+      this.girl.x = lerp(scene.girlStartX, scene.girlKissX, stepT);
+      if (t < standEnd) {
+        this.player.setState('idle');
+        this.girl.setState('idle');
+      } else {
+        this.player.setState('kiss');
+        this.girl.setState('kiss');
+      }
       if (!scene.kissFired && t >= OUTRO_STEP_END) {
         scene.kissFired = true;
         this.effects.kissSparkle(
@@ -743,10 +812,21 @@ export class Game {
         this.effects.kissSparkle(midX + (Math.random() - 0.5) * 44, this.player.y + 12 + Math.random() * 24);
       }
     } else if (t < OUTRO_PART_END) {
+      // The kiss animation has finished: the reunion song takes over and
+      // keeps running through the couple's run. Calling this every frame of
+      // the phase is safe — the manager ignores repeats.
+      this.audio.playMusic('couple');
       this.player.kissT = 0;
       this.girl.kissT = 0;
       this.player.setState('cheer');
       const phase = (t - OUTRO_KISS_END) / Math.max(0.001, OUTRO_PART_END - OUTRO_KISS_END);
+      // They swap sides (she ends up behind him), so her return leads with a
+      // fast-out curve while he eases back: the crossing is quick instead of
+      // a slow merge of the two sprites.
+      const boySettle = easeInOut(phase);
+      const girlSettle = 1 - (1 - phase) ** 2;
+      this.player.x = lerp(scene.kissX, PLAYER_X, boySettle);
+      this.girl.x = lerp(scene.girlKissX, PLAYER_X - 46, girlSettle);
       if (phase < 0.4) {
         this.girl.setState('cheer');
         if (!scene.cheerFired) {
@@ -755,7 +835,6 @@ export class Game {
         }
       } else {
         this.girl.setState('run');
-        this.girl.x = lerp(scene.girlStartX + 22, this.player.x - 46, easeInOut((phase - 0.4) / 0.6));
       }
     } else {
       this.finishReunion();
@@ -777,6 +856,8 @@ export class Game {
       scene.phase = 'outro';
       scene.outroT = 0;
       this.clearDialogueFaces();
+      // The conversation is over: no recording follows them into the kiss.
+      this.audio.stopVoice();
       return;
     }
     this.applyBeat(REUNION_BEATS[scene.beatIndex]);
@@ -784,6 +865,18 @@ export class Game {
 
   // The player may advance a beat with jump, kick or Enter — never the beat
   // where she keeps her silence on purpose.
+  // The next beat depends on the current recording only when the speaker
+  // changes or the conversation ends — text within one speaker's turn moves
+  // at its own rhythm, but a voice is never cut off mid-sentence.
+  voiceBlocksAdvance(scene) {
+    const current = REUNION_BEATS[scene.beatIndex];
+    const next = REUNION_BEATS[scene.beatIndex + 1];
+    if (next && current && next.speaker === current.speaker) {
+      return false;
+    }
+    return !this.audio.isVoiceIdle();
+  }
+
   advanceDialogue() {
     const scene = this.reunion;
     if (!scene || scene.phase !== 'dialogue') {
@@ -797,6 +890,11 @@ export class Game {
     if (revealed < Array.from(beat.line).length) {
       return;
     }
+    // Manual advance respects the recording too: pressing Continue during the
+    // other character's line waits instead of skipping over their voice.
+    if (this.voiceBlocksAdvance(scene)) {
+      return;
+    }
     this.nextBeat();
   }
 
@@ -807,6 +905,13 @@ export class Game {
     this.girl.setState(beat.ali.state);
     this.girl.faceOverride = beat.ali.face ?? null;
     this.girl.speaking = beat.speaker === 'ali' && !!beat.line;
+    // One recording per speaker per conversation: later beats of the same
+    // turn never restart it, and the manager never overlaps two voices.
+    const scene = this.reunion;
+    if (beat.line && scene && !scene.voiceStarted[beat.speaker]) {
+      scene.voiceStarted[beat.speaker] = true;
+      this.audio.speak(beat.speaker);
+    }
   }
 
   clearDialogueFaces() {
@@ -825,7 +930,16 @@ export class Game {
     this.player.kissT = 0;
     this.girl.kissT = 0;
     this.clearDialogueFaces();
+    this.player.poseBlendRate = null;
+    this.girl.poseBlendRate = null;
+    this.audio.stopVoice();
+    // Idempotent: guarantees the reunion song is running once they are a
+    // couple, even if the scene jumped past the kiss phase.
+    this.audio.playMusic('couple');
     this.player.setState('run');
+    // The outro eases him back; this guarantees the exact running layout
+    // even if the scene was skipped.
+    this.player.x = PLAYER_X;
     this.girl.startTogether(this.player.x);
     this.spawnDistance = this.getNextHazardGap();
     this.setState('running');
@@ -938,11 +1052,9 @@ export class Game {
       view.rect(heart.x + 4, heart.y + bob, 4, 2, NEON.white);
     }
     this.crystals.draw(view, this.distance, this.visualTime);
-    // During the kiss he faces her; the mirrored rig only runs in the kiss.
-    this.player.draw(view, {
-      flip: this.reunion !== null && this.reunion.phase === 'outro'
-        && this.reunion.outroT < OUTRO_PART_END,
-    });
+    // He always faces right — she is on his right through the whole reunion,
+    // so mirroring him here would make him kiss empty space.
+    this.player.draw(view);
     this.effects.draw(view);
     // The kick comments sit on top of the world, next to the impact.
     this.comments.draw(view);
@@ -963,7 +1075,7 @@ export class Game {
     if (this.reunion && this.reunion.phase === 'dialogue') {
       const beat = REUNION_BEATS[this.reunion.beatIndex];
       if (beat) {
-        drawDialogueBox(view, beat, this.reunion.beatTime, beat.hold);
+        drawDialogueBox(view, beat, this.reunion.beatTime, beat.hold, !this.reunion.voiceBlocked);
       }
     }
     view.present();
