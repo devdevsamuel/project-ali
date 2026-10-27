@@ -34,6 +34,12 @@
 - Update documentation when necessary.
 - Avoid duplicating requirements or plans.
 
+## Deployment
+- The site is published to <https://devdevsamuel.github.io/project-ali/> from the `main` branch.
+- `.github/workflows/deploy.yml` tests, builds and publishes `dist/`; pushing to `main` deploys it.
+- `vite.config.js` sets `base: '/project-ali/'` — keep it in sync with the repository name.
+- See `DEPLOY.md` for the workflow, permissions and troubleshooting.
+
 ## Priority
 1. Follow the user's latest explicit instructions.
 2. Respect the existing architecture.
