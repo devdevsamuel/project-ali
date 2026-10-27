@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#170D2E" />
+    <title>Love Runner</title>
+  </head>
+  <body>
+    <main class="app">
+      <header class="game-header">
+        <h1>Love Runner</h1>
+        <p>A stormy run alone — four crystals, a reunion, and a whole world coming back to life.</p>
+      </header>
+
+      <section class="game-shell" aria-label="Love Runner game">
+        <div class="game-frame">
+          <div class="hud">
+            <div class="hud-stats">
+              <span>Distance: <strong id="distance">0 m</strong></span>
+              <span class="hud-crystals">Crystals: <strong id="crystals">0/4</strong></span>
+              <span class="hud-hearts">Hearts: <strong id="hearts">0</strong></span>
+              <span class="hud-money">Cash: <strong id="money">$100</strong></span>
+              <span class="hud-kicks">Kicks: <strong id="kickCount">0</strong></span>
+            </div>
+            <button id="pauseButton" class="small-button" type="button" disabled>Pause</button>
+          </div>
+
+          <canvas id="gameCanvas" width="960" height="540" aria-label="A side-scrolling runner game. Jump with Space or Arrow Up, kick rivals with X or K, and collect four crystals before the reunion."></canvas>
+
+          <p id="toast" class="toast" hidden></p>
+
+          <div id="startScreen" class="overlay">
+            <div class="panel">
+              <h2>Ready to run?</h2>
+              <p>Fight through the storm — jump or <strong>kick</strong> the rivals, dodge the robber, gather all <strong>four crystals</strong>, and find her waiting down the path.</p>
+              <p class="hint">Space or ↑ to jump, X or K to kick. During the reunion: Space, Enter, or tap to continue.</p>
+              <button id="startButton" type="button">Start running</button>
+            </div>
+          </div>
+
+          <div id="pauseScreen" class="overlay" hidden>
+            <div class="panel">
+              <h2>Paused</h2>
+              <p>Take your time.</p>
+              <button id="resumeButton" type="button">Resume</button>
+            </div>
+          </div>
+
+          <div id="gameOverScreen" class="overlay" hidden>
+            <div class="panel">
+              <h2>Run over</h2>
+              <p>You reached <strong id="finalDistance">0 m</strong>.</p>
+              <button id="restartButton" type="button">Run again</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <p><kbd>Space</kbd> / <kbd>↑</kbd> to jump · <kbd>X</kbd> / <kbd>K</kbd> to kick (solo stage) · <kbd>P</kbd> / <kbd>Esc</kbd> to pause<span id="doubleHint"> · jump twice mid-air once you are together</span></p>
+          <div class="control-buttons">
+            <button id="kickButton" class="kick-button" type="button" disabled aria-label="Kick">Kick <span aria-hidden="true">✕</span></button>
+            <button id="jumpButton" class="jump-button" type="button" disabled aria-label="Jump">Jump <span aria-hidden="true">↑</span></button>
+          </div>
+        </div>
+        <p id="gameStatus" class="sr-only" aria-live="polite"></p>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
