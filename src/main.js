@@ -5,10 +5,8 @@ import { KISSES_REQUIRED_FOR_BABY, CRYSTAL_COUNT } from './game/config.js';
 const elements = {
   canvas: document.querySelector('#gameCanvas'),
   distance: document.querySelector('#distance'),
-  hearts: document.querySelector('#hearts'),
   crystals: document.querySelector('#crystals'),
-  money: document.querySelector('#money'),
-  kickCount: document.querySelector('#kickCount'),
+  kissesChip: document.querySelector('#kissesChip'),
   kisses: document.querySelector('#kisses'),
   livesChip: document.querySelector('#livesChip'),
   lives: document.querySelector('#lives'),
@@ -62,6 +60,12 @@ function updateScreen(state) {
   // The kick belongs to the solo stage only.
   elements.kickButton.disabled = !(state === 'running' && !game.couple);
 
+  // The kisses counter only exists once the couple is actually running
+  // together; it stays hidden in the menu, the solo stage, the reunion and
+  // every terminal state. Use the couple flag (not the running state) so it
+  // stays visible while paused, matching the life chip's behaviour.
+  elements.kissesChip.hidden = !game.couple;
+
   if (state === 'gameover') {
     elements.finalDistance.textContent = `${Math.floor(game.distance)} m`;
     elements.status.textContent = `Fin de la carrera en ${Math.floor(game.distance)} metros.`;
@@ -94,19 +98,8 @@ const game = new Game(elements.canvas, {
   onDistanceChange: (distance) => {
     elements.distance.textContent = `${distance} m`;
   },
-  onHeartsChange: (hearts) => {
-    elements.hearts.textContent = `${hearts}`;
-  },
   onCrystalsChange: (count) => {
     elements.crystals.textContent = `${count}/${CRYSTAL_COUNT}`;
-  },
-  onMoneyChange: (money) => {
-    // The balance turns red once the thief has taken the money.
-    elements.money.textContent = money < 0 ? `-$${Math.abs(money)}` : `$${money}`;
-    elements.money.classList.toggle('is-debt', money < 0);
-  },
-  onKickCountChange: (count) => {
-    elements.kickCount.textContent = `${count}`;
   },
   onKissCountChange: (count) => {
     // The counter reads x/KISSES_REQUIRED_FOR_BABY; extra kisses after the

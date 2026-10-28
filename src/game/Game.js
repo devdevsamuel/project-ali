@@ -40,6 +40,8 @@ import {
   ROBBER_FIRST_DELAY,
   STARTING_MONEY, ROBBED_MONEY,
   RAIN_INTENSITY_PER_CRYSTAL, RAIN_MAX_INTENSITY,
+  SOLO_HAZARD_REACTION_MIN, SOLO_HAZARD_REACTION_RANGE,
+  COUPLE_HAZARD_REACTION_MIN, COUPLE_HAZARD_REACTION_RANGE,
 } from './config.js';
 
 export { GAME_WIDTH, GAME_HEIGHT };
@@ -1468,8 +1470,12 @@ export class Game {
   }
 
   getNextHazardGap() {
-    const minimumReactionTime = 1.05;
-    return this.speed * (minimumReactionTime + Math.random() * 0.6);
+    // Solo running has more kickable rivals and a tighter cadence; the couple
+    // stage keeps the original, readable spacing for the street props.
+    if (!this.couple) {
+      return this.speed * (SOLO_HAZARD_REACTION_MIN + Math.random() * SOLO_HAZARD_REACTION_RANGE);
+    }
+    return this.speed * (COUPLE_HAZARD_REACTION_MIN + Math.random() * COUPLE_HAZARD_REACTION_RANGE);
   }
 
   get progress() {

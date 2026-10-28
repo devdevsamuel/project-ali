@@ -126,6 +126,13 @@ export const ALI_THINK_SECONDS = 2.6;
 // crystal.
 export const AWAKEN_SECONDS = 6;
 
+// Obstacle spacing. Solo running has more kickable rivals and a tighter
+// cadence; the couple stage keeps the original, readable spacing.
+export const SOLO_HAZARD_REACTION_MIN = 0.75;
+export const SOLO_HAZARD_REACTION_RANGE = 0.3;
+export const COUPLE_HAZARD_REACTION_MIN = 1.05;
+export const COUPLE_HAZARD_REACTION_RANGE = 0.6;
+
 // Distance over which the background lighting/color gradually evolves.
 export const PROGRESS_DISTANCE = 500;
 
